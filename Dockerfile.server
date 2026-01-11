@@ -36,7 +36,11 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends \
 		ca-certificates \
+		libbz2-1.0 \
+		libjpeg62-turbo \
+		libsdl1.2debian \
 		libssl3 \
+		zlib1g \
 	&& rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/zandronum
