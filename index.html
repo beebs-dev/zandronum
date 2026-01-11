@@ -49,6 +49,12 @@
       const hud = document.getElementById('hud');
       const canvas = document.getElementById('canvas');
 
+      // Allow the canvas to receive keyboard focus (helps SDL + pointer lock).
+      try {
+        canvas.tabIndex = 0;
+        canvas.style.outline = 'none';
+      } catch (_) {}
+
       function setHud(text) {
         hud.textContent = String(text ?? '');
       }
@@ -141,18 +147,54 @@
         setHud('Connecting WebRTC…');
         const room = new LivekitClient.Room({});
 
-        // Chrome blocks audio until a user gesture. LiveKit will warn if it
-        // tries to acquire an AudioContext too early. Resume audio on first
-        // pointer gesture; data channels still work either way.
-        try {
-          window.addEventListener('pointerdown', () => {
+        // Promise that resolves on the first user gesture.
+        let resolveFirstGesture;
+        const firstGesture = new Promise((resolve) => { resolveFirstGesture = resolve; });
+
+        // Chrome blocks audio + pointer lock until a user gesture.
+        // Use the first pointer gesture to:
+        //  - resume LiveKit audio (so voice/audio tracks can play)
+        //  - resume the Emscripten WebAudio context (SDL audio)
+        //  - request pointer lock so the game gets mouse-look
+        let firstGestureHandlerInstalled = false;
+        function installFirstGestureHandler(getModule) {
+          if (firstGestureHandlerInstalled) return;
+          firstGestureHandlerInstalled = true;
+          const handler = async () => {
             try {
-              room.startAudio?.().catch(() => {});
+              canvas.focus?.();
             } catch (_) {}
-          }, { once: true });
-        } catch (_) {
-          // Ignore if addEventListener fails.
+
+            // Pointer lock for mouse capture.
+            try {
+              if (!document.pointerLockElement && canvas.requestPointerLock) {
+                canvas.requestPointerLock();
+              }
+            } catch (_) {}
+
+            // LiveKit audio (optional).
+            try {
+              await room.startAudio?.();
+            } catch (_) {}
+
+            // SDL/WebAudio (Emscripten): best-effort resume.
+            try {
+              const mod = getModule?.();
+              const ctx = mod?.SDL2?.audioContext || mod?.SDL?.audioContext || window.SDL2?.audioContext;
+              if (ctx && ctx.state === 'suspended' && typeof ctx.resume === 'function') {
+                await ctx.resume();
+              }
+            } catch (_) {}
+
+            try { resolveFirstGesture?.(); } catch (_) {}
+            resolveFirstGesture = null;
+          };
+
+          canvas.addEventListener('pointerdown', handler, { once: true });
         }
+
+        // Install early so LiveKit connect is always gated.
+        installFirstGestureHandler(() => null);
 
         // UDP queue for the WASM side to poll.
         const udpQueue = [];
@@ -216,6 +258,9 @@
           stats.lkRecv++;
         });
 
+        setHud('Click to start…');
+        await firstGesture;
+        setHud('Connecting WebRTC…');
         await room.connect(url, token);
 
         const debugEnabled = getParam('debug') === '1';
@@ -310,6 +355,10 @@
             }
           },
         });
+
+        // If the user hasn't clicked yet for any reason, allow a late gesture to
+        // resume SDL audio / pointer lock using the module instance.
+        installFirstGestureHandler(() => zand);
 
         if (debugEnabled) {
           try {

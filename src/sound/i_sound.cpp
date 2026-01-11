@@ -60,8 +60,12 @@ extern HINSTANCE g_hInst;
 #include "doomtype.h"
 #include <math.h>
 
-#ifndef NO_SOUND
+#if !defined(NO_SOUND) && !defined(__EMSCRIPTEN__)
 #include "fmodsound.h"
+#endif
+
+#if !defined(NO_SOUND) && defined(__EMSCRIPTEN__)
+#include "webaudiosound.h"
 #endif
 
 #include "m_swap.h"
@@ -263,7 +267,11 @@ void I_InitSound ()
 		return;
 	}
 
+	#ifdef __EMSCRIPTEN__
+	GSnd = new WebAudioSoundRenderer;
+	#else
 	GSnd = new FMODSoundRenderer;
+	#endif
 
 	if (!GSnd->IsValid ())
 	{

@@ -59,7 +59,7 @@
 #include "team.h"
 #include "chat.h"
 
-#ifndef NO_SOUND
+#if !defined(NO_SOUND) && !defined(NO_VOIP)
 #include "fmod_errors.h"
 #endif
 
@@ -270,8 +270,8 @@ CCMD( voice_unignore_idx )
 	CHAT_ExecuteUnignoreCmd( argv, true, true );
 }
 
-// [AK] Everything past this point only compiles if compiling with sound.
-#ifndef NO_SOUND
+// [AK] Everything past this point only compiles if compiling with sound and VoIP enabled.
+#if !defined(NO_SOUND) && !defined(NO_VOIP)
 
 static void voicechat_SetChannelVolume( FCommandLine &argv, const bool isIndexCmd )
 {
@@ -2103,7 +2103,7 @@ void VOIPController::VOIPChannel::UpdateEndDelay( const bool resetEpoch )
 	channel->setDelay( FMOD_DELAYTYPE_DSPCLOCK_END, newDSPHi, newDSPLo );
 }
 
-#endif // NO_SOUND
+#endif // NO_SOUND || NO_VOIP
 
 //*****************************************************************************
 //
@@ -2464,11 +2464,11 @@ bool FOptionMenuMicTestBar::Selectable( void )
 //*****************************************************************************
 //	STATISTICS
 
-#ifndef NO_SOUND
+#if !defined(NO_SOUND) && !defined(NO_VOIP)
 
 ADD_STAT( voice )
 {
 	return VOIPController::GetInstance( ).GrabStats( );
 }
 
-#endif // NO_SOUND
+#endif // NO_SOUND || NO_VOIP

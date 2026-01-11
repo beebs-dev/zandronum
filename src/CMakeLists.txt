@@ -177,7 +177,10 @@ else( WIN32 )
 		set( NO_GTK ON )
 		set( NO_LIBSECRET ON )
 		set( NO_GL ON )
-		set( NO_SOUND ON )
+		# Keep game sound enabled on the web (handled via SDL/WebAudio), but
+		# disable VoIP which depends on desktop-only deps (FMOD/Opus/RNNoise).
+		set( NO_VOIP ON )
+		add_definitions( -DNO_VOIP=1 )
 	endif( EMSCRIPTEN )
 	if( APPLE )
 		set( FMOD_SEARCH_PATHS "/Developer/FMOD Programmers API Mac/api" )
@@ -348,9 +351,9 @@ if( FMOD_INCLUDE_DIR )
 	message( STATUS "FMOD include files found at ${FMOD_INCLUDE_DIR}" )
 else( FMOD_INCLUDE_DIR )
 	# [BB] Without sound, we don't need FMOD.
-	if ( NOT NO_SOUND )
+	if ( NOT NO_SOUND AND NOT EMSCRIPTEN )
 		message( SEND_ERROR "Could not find FMOD include files" )
-	endif ( NOT NO_SOUND )
+	endif ( NOT NO_SOUND AND NOT EMSCRIPTEN )
 endif( FMOD_INCLUDE_DIR )
 
 
@@ -370,9 +373,9 @@ if( FMOD_LIBRARY )
 	message( STATUS "FMOD library found at ${FMOD_LIBRARY}" )
 else( FMOD_LIBRARY )
 	# [BB] Without sound, we don't need FMOD.
-	if ( NOT NO_SOUND )
+	if ( NOT NO_SOUND AND NOT EMSCRIPTEN )
 		message( SEND_ERROR "Could not find FMOD library" )
-	endif ( NOT NO_SOUND )
+	endif ( NOT NO_SOUND AND NOT EMSCRIPTEN )
 endif( FMOD_LIBRARY )
 
 
@@ -685,8 +688,12 @@ message( STATUS "Fluid synth libs: ${FLUIDSYNTH_LIBRARIES}" )
 set( ZDOOM_LIBS ${ZDOOM_LIBS} "${ZLIB_LIBRARIES}" "${JPEG_LIBRARIES}" "${BZIP2_LIBRARIES}" "${GME_LIBRARIES}" )
 # [BB] Without sound, we don't need FMOD.
 if ( NOT NO_SOUND )
-	set( ZDOOM_LIBS ${ZDOOM_LIBS} "${FMOD_LIBRARY}" )
-	include_directories( "${ZLIB_INCLUDE_DIR}" "${FMOD_INCLUDE_DIR}" "${BZIP2_INCLUDE_DIR}" "${LZMA_INCLUDE_DIR}" "${JPEG_INCLUDE_DIR}" "${GME_INCLUDE_DIR}" )
+	if( NOT EMSCRIPTEN )
+		set( ZDOOM_LIBS ${ZDOOM_LIBS} "${FMOD_LIBRARY}" )
+		include_directories( "${ZLIB_INCLUDE_DIR}" "${FMOD_INCLUDE_DIR}" "${BZIP2_INCLUDE_DIR}" "${LZMA_INCLUDE_DIR}" "${JPEG_INCLUDE_DIR}" "${GME_INCLUDE_DIR}" )
+	else( NOT EMSCRIPTEN )
+		include_directories( "${ZLIB_INCLUDE_DIR}" "${BZIP2_INCLUDE_DIR}" "${LZMA_INCLUDE_DIR}" "${JPEG_INCLUDE_DIR}" "${GME_INCLUDE_DIR}" )
+	endif( NOT EMSCRIPTEN )
 else ( NOT NO_SOUND )
 	include_directories( "${ZLIB_INCLUDE_DIR}" "${BZIP2_INCLUDE_DIR}" "${LZMA_INCLUDE_DIR}" "${JPEG_INCLUDE_DIR}" "${GME_INCLUDE_DIR}" )
 endif ( NOT NO_SOUND )
@@ -703,11 +710,11 @@ if( NOT EMSCRIPTEN )
 endif( NOT EMSCRIPTEN )
 
 # [AK] We need Opus for encoding/decoding VoIP audio packets, and RNNoise for noise suppression.
-if ( NOT NO_SOUND )
+if ( NOT NO_SOUND AND NOT EMSCRIPTEN )
 	find_package( Opus REQUIRED )
 	include_directories( ${OPUS_INCLUDE_DIR} )
 	set( ZDOOM_LIBS ${ZDOOM_LIBS} ${OPUS_LIBRARIES} rnnoise )
-endif ( NOT NO_SOUND )
+endif ( NOT NO_SOUND AND NOT EMSCRIPTEN )
 
 if( NOT DYN_FLUIDSYNTH)
 	if( FLUIDSYNTH_FOUND )
@@ -1392,7 +1399,9 @@ add_executable( zdoom WIN32
 	resourcefiles/file_directory.cpp
 	resourcefiles/resourcefile.cpp
 	sfmt/SFMT.cpp
-	sound/fmodsound.cpp
+	# Sound backend: FMOD on native, WebAudio/SDL on Emscripten.
+	$<$<BOOL:${EMSCRIPTEN}>:sound/webaudiosound.cpp>
+	$<$<NOT:$<BOOL:${EMSCRIPTEN}>>:sound/fmodsound.cpp>
 	sound/i_music.cpp
 	sound/i_sound.cpp
 	sound/music_cd.cpp

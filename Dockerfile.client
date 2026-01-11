@@ -29,7 +29,6 @@ RUN emcmake cmake -S . -B /build-web -G Ninja \
 	-DNO_GTK=ON \
 	-DNO_LIBSECRET=ON \
 	-DNO_GL=ON \
-	-DNO_SOUND=ON \
 	-DFORCE_INTERNAL_ZLIB=ON \
 	-DFORCE_INTERNAL_BZIP2=ON \
 	-DFORCE_INTERNAL_GME=ON \
