@@ -152,14 +152,22 @@
         const firstGesture = new Promise((resolve) => { resolveFirstGesture = resolve; });
 
         // Chrome blocks audio + pointer lock until a user gesture.
-        // Use the first pointer gesture to:
-        //  - resume LiveKit audio (so voice/audio tracks can play)
-        //  - resume the Emscripten WebAudio context (SDL audio)
-        //  - request pointer lock so the game gets mouse-look
-        let firstGestureHandlerInstalled = false;
-        function installFirstGestureHandler(getModule) {
-          if (firstGestureHandlerInstalled) return;
-          firstGestureHandlerInstalled = true;
+        // Keep a persistent pointer handler so we can re-capture mouse after blur.
+        let inputHandlersInstalled = false;
+        let currentModule = null;
+
+        function updatePointerLockUi() {
+          const locked = document.pointerLockElement === canvas;
+          canvas.style.cursor = locked ? 'none' : 'default';
+        }
+
+        function installInputHandlers() {
+          if (inputHandlersInstalled) return;
+          inputHandlersInstalled = true;
+
+          document.addEventListener('pointerlockchange', updatePointerLockUi);
+          updatePointerLockUi();
+
           const handler = async () => {
             try {
               canvas.focus?.();
@@ -179,22 +187,25 @@
 
             // SDL/WebAudio (Emscripten): best-effort resume.
             try {
-              const mod = getModule?.();
+              const mod = currentModule;
               const ctx = mod?.SDL2?.audioContext || mod?.SDL?.audioContext || window.SDL2?.audioContext;
               if (ctx && ctx.state === 'suspended' && typeof ctx.resume === 'function') {
                 await ctx.resume();
               }
             } catch (_) {}
 
-            try { resolveFirstGesture?.(); } catch (_) {}
-            resolveFirstGesture = null;
+            if (resolveFirstGesture) {
+              try { resolveFirstGesture(); } catch (_) {}
+              resolveFirstGesture = null;
+            }
           };
 
-          canvas.addEventListener('pointerdown', handler, { once: true });
+          // Not once: we need to re-acquire pointer lock after tab blur.
+          canvas.addEventListener('pointerdown', handler);
         }
 
         // Install early so LiveKit connect is always gated.
-        installFirstGestureHandler(() => null);
+        installInputHandlers();
 
         // UDP queue for the WASM side to poll.
         const udpQueue = [];
@@ -356,9 +367,8 @@
           },
         });
 
-        // If the user hasn't clicked yet for any reason, allow a late gesture to
-        // resume SDL audio / pointer lock using the module instance.
-        installFirstGestureHandler(() => zand);
+        // Give input handlers access to the module instance (for resuming SDL audio).
+        currentModule = zand;
 
         if (debugEnabled) {
           try {

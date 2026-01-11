@@ -54,3 +54,8 @@ Then I want to connect to the server over WebRTC (the endpoint is in the `url` f
 See index.html for known good WebRTC connection code. 
 
 The networking layer should be relatively thin. The UDP packets should be bubbled up to Javascript so they can be published over WebRTC. Both incoming and outgoing messages need the "udp" topic, and the client will only receive messages from the participant named "server". When a packet is received from WebRTC, send it to WASM where the existing networking code processes it just the same.
+
+
+
+
+Awesome. Almost everything works now. When I blur the game's focus to e.g. look at stuff in another tab, and then I click back into the game, it doesn't re-capture the mouse.
