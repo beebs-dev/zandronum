@@ -1479,6 +1479,17 @@ add_executable( zdoom WIN32
 SET_TARGET_PROPERTIES( zdoom PROPERTIES PROJECT_LABEL Zandronum )
 
 if( EMSCRIPTEN )
+	# Preload IWAD/PWAD assets for the web build.
+	# Use per-file preloads and pass them via SHELL: to ensure the `path@mount`
+	# syntax is preserved as part of the option (otherwise em++ may treat it as
+	# a standalone input file).
+	file(GLOB ZAN_WEB_WADS "${CMAKE_SOURCE_DIR}/assets/*.wad")
+	set(ZAN_WEB_WAD_PRELOAD_ARGS "")
+	foreach(WAD_PATH IN LISTS ZAN_WEB_WADS)
+		get_filename_component(WAD_NAME "${WAD_PATH}" NAME)
+		list(APPEND ZAN_WEB_WAD_PRELOAD_ARGS "SHELL:--preload-file=${WAD_PATH}@/assets/${WAD_NAME}")
+	endforeach()
+
 	# Make CMake invoke emcc's JS output mode.
 	set_target_properties( zdoom PROPERTIES SUFFIX ".js" )
 
@@ -1498,7 +1509,8 @@ if( EMSCRIPTEN )
 		"-sEXPORT_NAME=createZandronumModule"
 		"-sINVOKE_RUN=0"
 		"-sEXIT_RUNTIME=0"
-		"--preload-file" "${ZDOOM_OUTPUT_DIR}/zandronum.pk3@/zandronum.pk3"
+		"SHELL:--preload-file=${ZDOOM_OUTPUT_DIR}/zandronum.pk3@/zandronum.pk3"
+		${ZAN_WEB_WAD_PRELOAD_ARGS}
 	)
 endif( EMSCRIPTEN )
 

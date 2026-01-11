@@ -159,6 +159,10 @@ void DrawHUD();
 
 extern player_t *Player;
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 // MACROS ------------------------------------------------------------------
 
 // TYPES -------------------------------------------------------------------
@@ -1272,8 +1276,122 @@ void D_ErrorCleanup ()
 //
 //==========================================================================
 
+#ifdef __EMSCRIPTEN__
+static int em_lasttic = 0;
+static bool em_initialized = false;
+
+static void D_DoomLoop_Tick()
+{
+	try
+	{
+		switch ( NETWORK_GetState( ))
+		{
+		case NETSTATE_CLIENT:
+			// [BB] Recieve packets whenever possible (not only once each tic) to allow
+			// for an accurate ping measurement.
+			// [BB] Possibly it's bad when we parse packets before we spawned in the map
+			// or the first tic was completed, so wait until then.
+			if ( ( CLIENT_GetConnectionState( ) == CTS_ACTIVE ) && level.maptime != 0 )
+				CLIENT_GetPackets( );
+
+			// frame syncronous IO operations
+			if (gametic > em_lasttic)
+			{
+				em_lasttic = gametic;
+				I_StartFrame ();
+			}
+
+			TryRunTics( );
+
+			// Move positional sounds.
+			// NOTE: .camera can be NULL if player has loaded the level but
+			// but the player hasn't spawned yet.
+			if ( players[consoleplayer].camera )
+				S_UpdateSounds( players[consoleplayer].camera );
+
+			// Update display, next frame, with current state.
+			// [AK] Don't call I_StartTic() if we're currently using the old
+			// Skulltag mouse behaviour.
+			if ( cl_useskulltagmouse == false )
+				I_StartTic( );
+
+			D_Display( );
+			break;
+		case NETSTATE_SERVER:
+			SERVER_Tick( );
+			break;
+		default:
+			// frame syncronous IO operations
+			if (gametic > em_lasttic)
+			{
+				em_lasttic = gametic;
+				I_StartFrame ();
+			}
+
+			// process one or more tics
+			if (singletics)
+			{
+				I_StartTic ();
+				D_ProcessEvents ();
+				G_BuildTiccmd (&netcmds[consoleplayer][maketic%BACKUPTICS]);
+				if (advancedemo)
+					D_DoAdvanceDemo ();
+				// Console Ticker
+				C_Ticker ();
+				// Menu Ticker
+				M_Ticker ();
+				// Game Ticker
+				G_Ticker ();
+				gametic++;
+				maketic++;
+				GC::CheckGC ();
+				Net_NewMakeTic ();
+			}
+			else
+			{
+				TryRunTics (); // non-blocking under Emscripten (see d_net.cpp)
+			}
+			// Update display, next frame, with current state.
+			I_StartTic ();
+			D_Display ();
+			break;
+		}
+	}
+	catch (CRecoverableError &error)
+	{
+		if (error.GetMessage ())
+		{
+			// [BC] Give this message a little more presence in server mode.
+			if ( NETWORK_GetState( ) == NETSTATE_SERVER )
+				Printf( "*** ERROR: %s\n", error.GetMessage( ));
+			else
+				Printf (PRINT_BOLD, "\n%s\n", error.GetMessage());
+		}
+		D_ErrorCleanup ();
+	}
+}
+#endif
+
 void D_DoomLoop ()
 {
+
+#ifdef __EMSCRIPTEN__
+	if (!em_initialized)
+	{
+		em_initialized = true;
+		em_lasttic = 0;
+
+		// Clamp the timer to TICRATE until the playloop has been entered.
+		r_NoInterpolate = true;
+		Page = Advisory = NULL;
+		vid_cursor.Callback();
+	}
+
+	emscripten_cancel_main_loop();
+	emscripten_set_main_loop(D_DoomLoop_Tick, 0, 1);
+	__builtin_unreachable();
+
+#else
 	int lasttic = 0;
 
 	// Clamp the timer to TICRATE until the playloop has been entered.
@@ -1376,6 +1494,8 @@ void D_DoomLoop ()
 			D_ErrorCleanup ();
 		}
 	}
+
+#endif
 }
 
 //==========================================================================

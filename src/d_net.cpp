@@ -1738,7 +1738,15 @@ void TryRunTics (void)
 
 	// If paused, do not eat more CPU time than we need, because it
 	// will all be wasted anyway.
+	//
+	// Under Emscripten, we must not busy-wait here, because it blocks the
+	// browser event loop (which prevents WebRTC/LiveKit callbacks from running).
+	// Instead, we run opportunistically when time has advanced.
+#ifdef __EMSCRIPTEN__
+	bool doWait = false;
+#else
 	bool doWait = cl_capfps || r_NoInterpolate /*|| netgame*/;
+#endif
 
 	// get real tics
 	if (doWait)
@@ -1854,6 +1862,14 @@ void TryRunTics (void)
 		}// !demoplayback
 
 		// wait for new tics if needed
+#ifdef __EMSCRIPTEN__
+		if (lowtic < gametic + counts)
+		{
+			NetUpdate();
+			Net_CheckLastRecieved(counts);
+			return;
+		}
+#else
 		while (lowtic < gametic + counts)
 		{
 			NetUpdate ();
@@ -1868,8 +1884,8 @@ void TryRunTics (void)
 			if (lowtic < gametic)
 				I_Error ("TryRunTics: lowtic < gametic");
 
-		// Check possible stall conditions
-		Net_CheckLastRecieved (counts);
+			// Check possible stall conditions
+			Net_CheckLastRecieved (counts);
 
 			// don't stay in here forever -- give the menu a chance to work
 			if (I_GetTime (false) - entertic >= TICRATE/3)
@@ -1879,6 +1895,7 @@ void TryRunTics (void)
 				return;
 			}
 		}
+#endif
 
 		//Tic lowtic is high enough to process this gametic. Clear all possible waiting info
 		hadlate = false;

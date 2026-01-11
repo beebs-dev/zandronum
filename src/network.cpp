@@ -56,6 +56,12 @@
 
 EM_JS(void, zan_webrtc_udp_send, (const unsigned char* data, int len, int reliable), {
 	if (!Module.__zanRtc || typeof Module.__zanRtc.sendUdp !== 'function') return;
+	if (Module.__zanRtc.debug) {
+		Module.__zanRtc._dbgSendCount = (Module.__zanRtc._dbgSendCount|0) + 1;
+		if (Module.__zanRtc._dbgSendCount <= 25) {
+			console.log('zan_webrtc_udp_send', 'len=', len|0, 'reliable=', reliable|0);
+		}
+	}
 	const start = data >>> 0;
 	const end = (start + (len|0)) >>> 0;
 	// Copy to detach from WASM memory.
@@ -67,6 +73,13 @@ EM_JS(int, zan_webrtc_udp_recv, (unsigned char* out, int maxLen), {
 	if (!Module.__zanRtc || typeof Module.__zanRtc.recvUdp !== 'function') return 0;
 	const pkt = Module.__zanRtc.recvUdp();
 	if (!pkt) return 0;
+	if (Module.__zanRtc.debug) {
+		Module.__zanRtc._dbgRecvCount = (Module.__zanRtc._dbgRecvCount|0) + 1;
+		if (Module.__zanRtc._dbgRecvCount <= 25) {
+			const n = (pkt && (pkt.length|0)) ? (pkt.length|0) : 0;
+			console.log('zan_webrtc_udp_recv', 'len=', n);
+		}
+	}
 	const u8 = pkt instanceof Uint8Array ? pkt : new Uint8Array(pkt);
 	const n = Math.min(u8.length, maxLen|0);
 	HEAPU8.set(u8.subarray(0, n), out >>> 0);

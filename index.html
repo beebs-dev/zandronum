@@ -143,29 +143,101 @@
 
         // UDP queue for the WASM side to poll.
         const udpQueue = [];
+        const stats = {
+          wasmSendCalls: 0,
+          wasmRecvCalls: 0,
+          lkRecv: 0,
+          lkSend: 0,
+          lkSendErr: 0,
+        };
+
+        function publishUdp(u8, reliable) {
+          if (!room || !room.localParticipant) return false;
+          const dest = ['server'];
+
+          // Preferred signature (LK v2): publishData(data, { reliable, topic, destinationIdentities })
+          try {
+            room.localParticipant.publishData(u8, {
+              reliable: !!reliable,
+              topic: 'udp',
+              destinationIdentities: dest,
+            });
+            stats.lkSend++;
+            return true;
+          } catch (_) {
+            // Fall through.
+          }
+
+          // Fallback signature:
+          // publishData(data, kind, options)
+          const kind = reliable
+            ? LivekitClient.DataPacket_Kind.RELIABLE
+            : LivekitClient.DataPacket_Kind.LOSSY;
+          try {
+            room.localParticipant.publishData(u8, kind, {
+              topic: 'udp',
+              destinationIdentities: dest,
+            });
+            stats.lkSend++;
+            return true;
+          } catch (_) {
+            // Fall back to broadcasting.
+          }
+          try {
+            room.localParticipant.publishData(u8, kind, { topic: 'udp' });
+            stats.lkSend++;
+            return true;
+          } catch (_) {
+            stats.lkSendErr++;
+            return false;
+          }
+        }
 
         room.on(LivekitClient.RoomEvent.DataReceived, (payload, participant, kind, topic) => {
-          if (topic !== 'udp') return;
+          // Some LiveKit publishData overloads may omit topic on the receiver.
+          // Treat missing topic as UDP for this app.
+          if (topic && topic !== 'udp') return;
           if ((participant?.identity ?? '') !== 'server') return;
           // payload is Uint8Array
           udpQueue.push(payload);
+          stats.lkRecv++;
         });
 
         await room.connect(url, token);
 
+        const debugEnabled = getParam('debug') === '1';
+
+        if (debugEnabled) {
+          // If this never prints, the engine likely blocks the JS event loop.
+          setTimeout(() => console.log('debug: event loop still alive (pre-callMain)'), 1000);
+        }
+
+        // Debug-only: verify that LiveKit data packets reach the server/proxy
+        // even if the engine never calls into the UDP bridge.
+        if (debugEnabled) {
+          try {
+            const bytes = new TextEncoder().encode('zan-debug-ping');
+            const ok = publishUdp(bytes, true);
+            console.log('debug: sent zan-debug-ping ok=', ok);
+          } catch (e) {
+            console.warn('debug: failed to send zan-debug-ping', e);
+          }
+        }
+
         // JS transport surface consumed by src/network.cpp (EM_JS hooks).
-        // Both directions use topic "udp".
-        window.Module = window.Module || {};
-        window.Module.__zanRtc = {
+        // IMPORTANT: this Zandronum build is MODULARIZE'd, so the C++ EM_JS
+        // hooks see the *module instance*, not window.Module.
+        // We attach __zanRtc onto the module instance via the factory options
+        // passed to createZandronumModule().
+        const zanRtc = {
+          debug: debugEnabled,
           recvUdp() {
+            stats.wasmRecvCalls++;
             return udpQueue.length ? udpQueue.shift() : null;
           },
           sendUdp(u8, reliable) {
-            if (!room || !room.localParticipant) return;
-            const kind = reliable
-              ? LivekitClient.DataPacket_Kind.RELIABLE
-              : LivekitClient.DataPacket_Kind.LOSSY;
-            room.localParticipant.publishData(u8, kind, { topic: 'udp' });
+            stats.wasmSendCalls++;
+            publishUdp(u8, !!reliable);
           },
         };
 
@@ -173,18 +245,58 @@
 
         const zand = await window.createZandronumModule({
           noInitialRun: true,
+          __zanRtc: zanRtc,
           canvas,
-          print: (t) => { /* optional */ },
-          printErr: (t) => { /* optional */ },
+          print: (t) => {
+            if (t !== undefined && t !== null && String(t).trim()) {
+              console.log(String(t));
+            }
+          },
+          printErr: (t) => {
+            if (t !== undefined && t !== null && String(t).trim()) {
+              console.error(String(t));
+            }
+          },
         });
+
+        if (debugEnabled) {
+          try {
+            const hasFs = !!zand.FS;
+            const iwadPath = '/assets/freedoom2.wad';
+            const pk3Path = '/zandronum.pk3';
+            const iwadExists = hasFs ? !!zand.FS.analyzePath(iwadPath).exists : false;
+            const pk3Exists = hasFs ? !!zand.FS.analyzePath(pk3Path).exists : false;
+            console.log('debug: FS available=', hasFs, 'iwadExists=', iwadExists, 'pk3Exists=', pk3Exists);
+            if (!iwadExists) {
+              console.warn('debug: missing IWAD at', iwadPath);
+            }
+          } catch (e) {
+            console.warn('debug: FS check failed', e);
+          }
+        }
 
         resizeCanvas(zand);
         window.addEventListener('resize', () => resizeCanvas(zand));
 
         // Kick off the engine in client mode. The IP is a dummy; UDP is bridged over WebRTC.
-        zand.callMain(['-connect', '127.0.0.1']);
+        // Use the preloaded IWAD so the engine can actually start.
+        zand.callMain(['-iwad', '/assets/freedoom2.wad', '-connect', '127.0.0.1']);
 
-        setHud('');
+        if (debugEnabled) {
+          // If this never prints, callMain likely never returns (busy loop / no emscripten main loop integration).
+          setTimeout(() => console.log('debug: event loop still alive (post-callMain)'), 1000);
+        }
+
+        // Minimal on-screen diagnostic (only if ?debug=1).
+        if (debugEnabled) {
+          setInterval(() => {
+            setHud(
+              `wasmSend=${stats.wasmSendCalls} wasmRecv=${stats.wasmRecvCalls} lkSend=${stats.lkSend} lkSendErr=${stats.lkSendErr} lkRecv=${stats.lkRecv} udpQueue=${udpQueue.length}`
+            );
+          }, 250);
+        } else {
+          setHud('');
+        }
       }
 
       main().catch((e) => {
