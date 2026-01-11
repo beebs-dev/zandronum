@@ -15,6 +15,8 @@
       }
       #canvas {
         display: block;
+        position: fixed;
+        inset: 0;
         width: 100vw;
         height: 100vh;
         image-rendering: pixelated;
@@ -122,15 +124,28 @@
       }
 
       function resizeCanvas(module) {
-        // Match CSS pixels; SDL will handle scaling.
-        const w = Math.max(1, window.innerWidth | 0);
-        const h = Math.max(1, window.innerHeight | 0);
-        if (module && typeof module.setCanvasSize === 'function') {
-          module.setCanvasSize(w, h, false);
-        } else {
-          canvas.width = w;
-          canvas.height = h;
-        }
+        // IMPORTANT:
+        // Zandronum's SDL path typically renders at a fixed internal resolution
+        // (often 640x480) and blits to the canvas at (0,0). If we resize the canvas
+        // backing buffer dynamically, the game may only draw into the top-left
+        // portion after a resize.
+        //
+        // To guarantee “stretched fullscreen” behavior on resize, we only enforce
+        // full-viewport *CSS sizing* here and let the engine keep its chosen
+        // backing-buffer resolution.
+        canvas.style.position = 'fixed';
+        canvas.style.inset = '0';
+        canvas.style.width = '100vw';
+        canvas.style.height = '100vh';
+      }
+
+      let resizeRaf = 0;
+      function scheduleResize(module) {
+        if (resizeRaf) return;
+        resizeRaf = requestAnimationFrame(() => {
+          resizeRaf = 0;
+          resizeCanvas(module);
+        });
       }
 
       async function main() {
@@ -386,8 +401,13 @@
           }
         }
 
+        // IMPORTANT: do this synchronously before callMain() (which may block the event loop).
         resizeCanvas(zand);
-        window.addEventListener('resize', () => resizeCanvas(zand));
+        window.addEventListener('resize', () => scheduleResize(zand));
+        window.addEventListener('orientationchange', () => scheduleResize(zand));
+        window.addEventListener('fullscreenchange', () => scheduleResize(zand));
+        // visualViewport helps on mobile where the URL bar affects layout.
+        window.visualViewport?.addEventListener('resize', () => scheduleResize(zand));
 
         // Kick off the engine in client mode. The IP is a dummy; UDP is bridged over WebRTC.
         // Use the preloaded IWAD so the engine can actually start.
@@ -424,7 +444,14 @@
         // Minimal on-screen diagnostic (only if ?debug=1).
         if (debugEnabled) {
           setInterval(() => {
+            let cssSize = 'unknown';
+            try {
+              const r = canvas.getBoundingClientRect();
+              cssSize = `${Math.round(r.width)}x${Math.round(r.height)}`;
+            } catch (_) {}
+            const dpr = Math.max(1, Number(window.devicePixelRatio) || 1);
             setHud(
+              `css=${cssSize} buf=${canvas.width}x${canvas.height} dpr=${dpr.toFixed(2)}\n` +
               `wasmSend=${stats.wasmSendCalls} wasmRecv=${stats.wasmRecvCalls} lkSend=${stats.lkSend} lkSendErr=${stats.lkSendErr} lkRecv=${stats.lkRecv} udpQueue=${udpQueue.length}`
             );
           }, 250);
