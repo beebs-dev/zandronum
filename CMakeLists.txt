@@ -2,6 +2,11 @@
 cmake_minimum_required( VERSION 3.5 )
 project(Zandronum)
 
+# Tools-only mode for cross compilation setups (e.g., Emscripten).
+# This lets us build and export host executables (zipdir/re2c/lemon/...) without
+# configuring/depending on the full engine.
+option( BUILD_TOOLS_ONLY "Only build host tools (for cross compiling)." OFF )
+
 if( COMMAND cmake_policy )
 	cmake_policy( SET CMP0011 NEW )
 	cmake_policy( SET CMP0054 NEW )
@@ -54,6 +59,11 @@ function( add_pk3 PK3_NAME PK3_DIR )
 		# rebuild each time since their dependecy has "changed."
 		add_custom_target( ${PK3_TARGET} ALL
 			COMMAND ${CMAKE_COMMAND} -E touch $<TARGET_FILE:zipdir>
+			DEPENDS ${ZDOOM_OUTPUT_DIR}/${PK3_NAME} )
+	else( NOT NO_GENERATOR_EXPRESSIONS )
+		# Still create a target so pk3s can be built explicitly when
+		# generator expressions are disabled.
+		add_custom_target( ${PK3_TARGET} ALL
 			DEPENDS ${ZDOOM_OUTPUT_DIR}/${PK3_NAME} )
 	endif( NOT NO_GENERATOR_EXPRESSIONS )
 endfunction( add_pk3 )
@@ -238,35 +248,43 @@ if( RELEASE_WITH_DEBUG_FILE )
 	endif ( MSVC )
 endif( RELEASE_WITH_DEBUG_FILE )
 
-# [BB] Library that allows to map IP addresses to country names.
-add_subdirectory( GeoIP )
-# [BB]
-add_subdirectory( masterserver )
-# [BB] Library for the database backend.
-add_subdirectory( sqlite )
-add_subdirectory( lzma )
-add_subdirectory( tools )
-add_subdirectory( dumb )
-add_subdirectory( gdtoa )
-add_subdirectory( wadsrc )
-add_subdirectory( wadsrc_bm )
-# [BB] Zandronum includes the light definitions in zandronum.pk3.
-#add_subdirectory( wadsrc_lights )
-# [BB] Compatibility wad to support Skulltag mods.
-add_subdirectory( wadsrc_st )
-add_subdirectory( src )
+if( BUILD_TOOLS_ONLY )
+	# Keep this minimal: only build what is required to create/export host tools.
+	add_subdirectory( lzma )
+	# Needed for cross-compiling: gdtoa generates headers via host tools (arithchk/qnan).
+	add_subdirectory( gdtoa )
+	add_subdirectory( tools )
+else()
+	# [BB] Library that allows to map IP addresses to country names.
+	add_subdirectory( GeoIP )
+	# [BB]
+	add_subdirectory( masterserver )
+	# [BB] Library for the database backend.
+	add_subdirectory( sqlite )
+	add_subdirectory( lzma )
+	add_subdirectory( tools )
+	add_subdirectory( dumb )
+	add_subdirectory( gdtoa )
+	add_subdirectory( wadsrc )
+	add_subdirectory( wadsrc_bm )
+	# [BB] Zandronum includes the light definitions in zandronum.pk3.
+	#add_subdirectory( wadsrc_lights )
+	# [BB] Compatibility wad to support Skulltag mods.
+	add_subdirectory( wadsrc_st )
+	add_subdirectory( src )
 
-# [AK] Library for noise suppression for VoIP.
-if ( NOT NO_SOUND )
-	add_subdirectory( rnnoise )
-endif ( NOT NO_SOUND )
+	# [AK] Library for noise suppression for VoIP.
+	if ( NOT NO_SOUND )
+		add_subdirectory( rnnoise )
+	endif ( NOT NO_SOUND )
 
-if( NOT WIN32 AND NOT APPLE )
-	# [BB] We don't need output_sdl (only used for sound), if we are just building the server.
-	if ( NOT SERVERONLY )
-		add_subdirectory( output_sdl )
-	endif ( NOT SERVERONLY )
-endif( NOT WIN32 AND NOT APPLE )
+	if( NOT WIN32 AND NOT APPLE )
+		# [BB] We don't need output_sdl (only used for sound), if we are just building the server.
+		if ( NOT SERVERONLY AND NOT NO_SOUND AND NOT EMSCRIPTEN )
+			add_subdirectory( output_sdl )
+		endif ( NOT SERVERONLY AND NOT NO_SOUND AND NOT EMSCRIPTEN )
+	endif( NOT WIN32 AND NOT APPLE )
+endif()
 
 if( NOT CMAKE_CROSSCOMPILING )
 	export(TARGETS ${CROSS_EXPORTS} FILE "${CMAKE_BINARY_DIR}/ImportExecutables.cmake" )

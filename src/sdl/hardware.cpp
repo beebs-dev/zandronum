@@ -265,6 +265,11 @@ static void FPSLimitNotify(sigval val)
 
 void I_SetFPSLimit(int limit)
 {
+#ifdef __EMSCRIPTEN__
+	// Browsers control timing; POSIX timers are unavailable.
+	(void)limit;
+	return;
+#else
 	static sigevent FPSLimitEvent;
 	static timer_t FPSLimitTimer;
 	static bool FPSLimitTimerEnabled = false;
@@ -306,6 +311,8 @@ void I_SetFPSLimit(int limit)
 			Printf("Failed to set FPS limitter timer\n");
 		DPrintf("FPS timer set to %u ms\n", (unsigned int) period.it_interval.tv_nsec / 1000000);
 	}
+
+#endif
 }
 #else
 // So Apple doesn't support POSIX timers and I can't find a good substitute short of

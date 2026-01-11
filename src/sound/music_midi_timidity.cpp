@@ -3,6 +3,73 @@
 #include "cmdlib.h"
 #include "templates.h"
 
+#ifdef __EMSCRIPTEN__
+
+// Browser builds cannot launch external TiMidity++ processes.
+
+int ChildQuit = 0;
+
+void ChildSigHandler (int)
+{
+}
+
+TimidityPPMIDIDevice::TimidityPPMIDIDevice()
+	: DiskName("zmid")
+{
+	ChildProcess = -1;
+	LoopPos = 0;
+}
+
+TimidityPPMIDIDevice::~TimidityPPMIDIDevice()
+{
+	Stop();
+}
+
+int TimidityPPMIDIDevice::Open(void (*)(unsigned int, void *, DWORD, DWORD), void *)
+{
+	return 1;
+}
+
+bool TimidityPPMIDIDevice::Preprocess(MIDIStreamer *, bool)
+{
+	return false;
+}
+
+bool TimidityPPMIDIDevice::IsOpen() const
+{
+	return false;
+}
+
+bool TimidityPPMIDIDevice::IsOpen()
+{
+	return false;
+}
+
+int TimidityPPMIDIDevice::Resume()
+{
+	return 1;
+}
+
+void TimidityPPMIDIDevice::Stop()
+{
+}
+
+void TimidityPPMIDIDevice::TimidityVolumeChanged()
+{
+}
+
+bool TimidityPPMIDIDevice::LaunchTimidity()
+{
+	return false;
+}
+
+bool TimidityPPMIDIDevice::FillStream(SoundStream *, void *, int, void *)
+{
+	return false;
+}
+
+#else
+
 #ifndef _WIN32
 #include <unistd.h>
 
@@ -723,3 +790,5 @@ BOOL SafeTerminateProcess(HANDLE hProcess, UINT uExitCode)
 	return bSuccess;
 }
 #endif
+
+#endif // __EMSCRIPTEN__

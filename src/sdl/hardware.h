@@ -49,6 +49,17 @@ typedef semaphore_t Semaphore;
 	semaphore_signal(sem);
 #define SEMAPHORE_INIT(sem, shared, value) \
 	semaphore_create(mach_task_self(), &sem, shared, value);
+#elif defined(__EMSCRIPTEN__)
+#include <semaphore.h>
+typedef sem_t Semaphore;
+#define SEMAPHORE_WAIT(sem) \
+	do { \
+		while (sem_wait(&sem) != 0) {} \
+	} while (false);
+#define SEMAPHORE_SIGNAL(sem) \
+	sem_post(&sem);
+#define SEMAPHORE_INIT(sem, shared, value) \
+	sem_init(&sem, shared, value);
 #else
 #include <semaphore.h>
 typedef sem_t Semaphore;

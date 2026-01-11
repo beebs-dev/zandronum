@@ -1,0 +1,48 @@
+FROM emscripten/emsdk:3.1.58 AS build
+
+WORKDIR /src
+COPY . .
+
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+	 build-essential \
+	 cmake \
+	 ninja-build \
+	 python3 \
+ && rm -rf /var/lib/apt/lists/*
+
+# Build host tools (zipdir/re2c/lemon/...) inside Docker for cross-compiling.
+# gdtoa also needs host tools (arithchk/qnan) during the cross build.
+RUN cmake -S . -B /build-tools -G Ninja \
+	-DCMAKE_BUILD_TYPE=Release \
+	-DBUILD_TOOLS_ONLY=ON \
+	-DFORCE_INTERNAL_ZLIB=ON \
+	-DFORCE_INTERNAL_BZIP2=ON \
+	-DFORCE_INTERNAL_GME=ON \
+ && cmake --build /build-tools --target zipdir re2c lemon updaterevision arithchk qnan
+
+# Cross-compile the client to WebAssembly.
+RUN emcmake cmake -S . -B /build-web -G Ninja \
+	-DCMAKE_BUILD_TYPE=Release \
+	-DIMPORT_EXECUTABLES=/build-tools/ImportExecutables.cmake \
+	-DNO_GENERATOR_EXPRESSIONS=ON \
+	-DNO_GTK=ON \
+	-DNO_LIBSECRET=ON \
+	-DNO_GL=ON \
+	-DNO_SOUND=ON \
+	-DFORCE_INTERNAL_ZLIB=ON \
+	-DFORCE_INTERNAL_BZIP2=ON \
+	-DFORCE_INTERNAL_GME=ON \
+ && cmake --build /build-web --target pk3 \
+ && cmake --build /build-web --target zdoom
+
+# Collect web artifacts
+RUN mkdir -p /dist \
+ && cp -v /src/index.html /dist/index.html \
+ && cp -v /build-web/zandronum.js /dist/zandronum.js \
+ && cp -v /build-web/zandronum.wasm /dist/zandronum.wasm \
+ && cp -v /build-web/zandronum.data /dist/zandronum.data
+
+FROM nginx:alpine AS runtime
+COPY --from=build /dist/ /usr/share/nginx/html/
+EXPOSE 80

@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <pwd.h>
-#if !defined(__sun)
+#if !defined(__sun) && !defined(__EMSCRIPTEN__)
 #include <fts.h>
 #endif
 #endif
@@ -980,7 +980,7 @@ void ScanDirectory(TArray<FFileList> &list, const char *dirpath)
 	}
 }
 
-#elif defined(__sun) || defined(__linux__)
+#elif defined(__sun) || defined(__linux__) || defined(__EMSCRIPTEN__)
 
 //==========================================================================
 //

@@ -12,6 +12,25 @@
 #include "d_event.h"
 #include "d_gui.h"
 #include "c_console.h"
+#ifdef __EMSCRIPTEN__
+// Emscripten's SDL compatibility layer declares some older SDL 1.x APIs but
+// does not always provide implementations. Provide minimal fallbacks.
+extern "C" {
+	void SDL_GetKeyRepeat(int *delay, int *interval)
+	{
+		if (delay) *delay = 0;
+		if (interval) *interval = 0;
+	}
+
+	Uint8 SDL_GetRelativeMouseState(int *x, int *y)
+	{
+		if (x) *x = 0;
+		if (y) *y = 0;
+		return SDL_GetMouseState(NULL, NULL);
+	}
+}
+#endif
+
 #include "c_cvars.h"
 #include "i_system.h"
 #include "dikeys.h"

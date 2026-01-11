@@ -50,6 +50,30 @@
 
 #include "networkheaders.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include "cl_main.h"
+
+EM_JS(void, zan_webrtc_udp_send, (const unsigned char* data, int len, int reliable), {
+	if (!Module.__zanRtc || typeof Module.__zanRtc.sendUdp !== 'function') return;
+	const start = data >>> 0;
+	const end = (start + (len|0)) >>> 0;
+	// Copy to detach from WASM memory.
+	const copy = HEAPU8.slice(start, end);
+	Module.__zanRtc.sendUdp(copy, reliable|0);
+});
+
+EM_JS(int, zan_webrtc_udp_recv, (unsigned char* out, int maxLen), {
+	if (!Module.__zanRtc || typeof Module.__zanRtc.recvUdp !== 'function') return 0;
+	const pkt = Module.__zanRtc.recvUdp();
+	if (!pkt) return 0;
+	const u8 = pkt instanceof Uint8Array ? pkt : new Uint8Array(pkt);
+	const n = Math.min(u8.length, maxLen|0);
+	HEAPU8.set(u8.subarray(0, n), out >>> 0);
+	return n|0;
+});
+#endif
+
 // [BB] Special things necessary for NETWORK_GetLocalAddress() under Linux.
 #ifdef __unix__
 #include <net/if.h>
@@ -267,6 +291,17 @@ void NETWORK_Construct( USHORT usPort, bool bAllocateLANSocket )
 
 	if ( !restart )
 	{
+#ifdef __EMSCRIPTEN__
+		// Browser builds do not have UDP sockets; the transport is provided by JS (WebRTC).
+		g_usLocalPort = usPort;
+		g_NetworkSocket = 1;
+		g_LANSocket = INVALID_SOCKET;
+		g_bLANSocketInvalid = true;
+		g_LocalAddress.LoadFromString( "127.0.0.1" );
+		g_LocalAddress.usPort = htons( NETWORK_GetLocalPort() );
+		Printf( "WebRTC/JS transport initialized.\n" );
+		Printf( "IP address %s\n", g_LocalAddress.ToString() );
+#else
 #ifdef __WIN32__
 		// [BB] Linux doesn't know WSADATA, so this may not be moved outside the ifdef.
 		WSADATA			WSAData;
@@ -369,6 +404,7 @@ void NETWORK_Construct( USHORT usPort, bool bAllocateLANSocket )
 
 		// Print out our local IP address.
 		Printf( "IP address %s\n", g_LocalAddress.ToString() );
+#endif
 	}
 
 	// Init our read buffer.
@@ -725,7 +761,9 @@ void NETWORK_Construct( USHORT usPort, bool bAllocateLANSocket )
 
 	// [BB] Now that the network is initialized, set up what's necessary
 	// to communicate with the authentication server.
+	#ifndef __EMSCRIPTEN__
 	NETWORK_AUTH_Construct();
+	#endif
 }
 
 //*****************************************************************************
@@ -758,11 +796,24 @@ int NETWORK_GetPackets( void )
 	if ( g_NetworkSocket == INVALID_SOCKET )
 		return ( 0 );
 
-#ifdef	WIN32
+	#ifdef __EMSCRIPTEN__
+	(void)SocketFrom;
+	(void)iSocketFromLength;
+	lNumBytes = zan_webrtc_udp_recv( g_ucHuffmanBuffer, (int)sizeof( g_ucHuffmanBuffer ) );
+	if ( lNumBytes <= 0 )
+		return 0;
+	// Present packets as if they came from the server address.
+	if ( NETWORK_GetState( ) == NETSTATE_CLIENT )
+		g_AddressFrom = CLIENT_GetServerAddress( );
+	else
+		g_AddressFrom.LoadFromString( "127.0.0.1" );
+	#else
+	#ifdef	WIN32
 	lNumBytes = recvfrom( g_NetworkSocket, (char *)g_ucHuffmanBuffer, sizeof( g_ucHuffmanBuffer ), 0, &SocketFrom, &iSocketFromLength );
-#else
+	#else
 	lNumBytes = recvfrom( g_NetworkSocket, (char *)g_ucHuffmanBuffer, sizeof( g_ucHuffmanBuffer ), 0, &SocketFrom, (socklen_t *)&iSocketFromLength );
-#endif
+	#endif
+	#endif
 
 	// If the number of bytes returned is -1, an error has occured.
 	if ( lNumBytes == -1 ) 
@@ -810,7 +861,9 @@ int NETWORK_GetPackets( void )
 		return ( 0 );
 
 	// Store the IP address of the sender.
+	#ifndef __EMSCRIPTEN__
 	g_AddressFrom.LoadFromSocketAddress( SocketFrom );
+	#endif
 
 	// Decode the huffman-encoded message we received.
 	// [BB] Communication with the auth server is not Huffman-encoded.
@@ -958,7 +1011,18 @@ void NETWORK_LaunchPacket( NETBUFFER_s *pBuffer, NETADDRESS_s Address )
 		iNumBytesOut = pBuffer->ulCurrentSize;
 	}
 
+	#ifdef __EMSCRIPTEN__
+	// Use a reliable data packet while establishing the connection, and lossy afterwards.
+	int reliable = 0;
+	if ( NETWORK_GetState( ) == NETSTATE_CLIENT )
+	{
+		reliable = ( CLIENT_GetConnectionState( ) != CTS_ACTIVE ) ? 1 : 0;
+	}
+	zan_webrtc_udp_send( g_ucHuffmanBuffer, iNumBytesOut, reliable );
+	lNumBytes = iNumBytesOut;
+	#else
 	lNumBytes = sendto( g_NetworkSocket, (const char*)g_ucHuffmanBuffer, iNumBytesOut, 0, reinterpret_cast<sockaddr*>(&SocketAddress), sizeof( SocketAddress ));
+	#endif
 
 	// If sendto returns -1, there was an error.
 	if ( lNumBytes == -1 )
@@ -1870,6 +1934,9 @@ extern int	do_stdin;
 // [BB] We only need this for the server console input under Linux.
 void I_DoSelect (void)
 {
+#ifdef __EMSCRIPTEN__
+	return;
+#endif
 #ifdef		WIN32
 /*
     struct timeval   timeout;

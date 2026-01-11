@@ -172,6 +172,13 @@ if( WIN32 )
 		oleaut32 
 		DelayImp )
 else( WIN32 )
+	if( EMSCRIPTEN )
+		# Web build: avoid desktop dependencies.
+		set( NO_GTK ON )
+		set( NO_LIBSECRET ON )
+		set( NO_GL ON )
+		set( NO_SOUND ON )
+	endif( EMSCRIPTEN )
 	if( APPLE )
 		set( FMOD_SEARCH_PATHS "/Developer/FMOD Programmers API Mac/api" )
 		set( FMOD_INC_PATH_SUFFIXES PATH_SUFFIXES inc )
@@ -258,15 +265,18 @@ else( WIN32 )
 		add_definitions( -DUSE_LIBSECRET=1 )
 	endif( )
 	
-	# Non-Windows version also needs SDL
-	find_package( SDL )
-	if( NOT SDL_FOUND )
-		message( SEND_ERROR "SDL is required for building." )
-	endif( NOT SDL_FOUND )
-	set( ZDOOM_LIBS ${ZDOOM_LIBS} "${SDL_LIBRARY}" )
-	# [BB] Don't put the SDL path in inverted commas. At least on FreeBSD 8.1 this
-	# variable contains two directories.
-	include_directories( ${SDL_INCLUDE_DIR} )
+	# Non-Windows version also needs SDL.
+	# For Emscripten, SDL is provided by link flags and is not discoverable via find_package.
+	if( NOT EMSCRIPTEN )
+		find_package( SDL )
+		if( NOT SDL_FOUND )
+			message( SEND_ERROR "SDL is required for building." )
+		endif( NOT SDL_FOUND )
+		set( ZDOOM_LIBS ${ZDOOM_LIBS} "${SDL_LIBRARY}" )
+		# [BB] Don't put the SDL path in inverted commas. At least on FreeBSD 8.1 this
+		# variable contains two directories.
+		include_directories( ${SDL_INCLUDE_DIR} )
+	endif( NOT EMSCRIPTEN )
 
 	find_path( FPU_CONTROL_DIR fpu_control.h )
 	if( FPU_CONTROL_DIR )
@@ -682,12 +692,15 @@ else ( NOT NO_SOUND )
 endif ( NOT NO_SOUND )
 
 # [BB] We need OpenSSL for csrp.
-FIND_PACKAGE ( OpenSSL REQUIRED )
-include_directories( ${OPENSSL_INCLUDE_DIR} )
-set ( ZDOOM_LIBS ${ZDOOM_LIBS} ${OPENSSL_LIBRARIES} )
-if( WIN32 )
-	set ( ZDOOM_LIBS ${ZDOOM_LIBS} crypt32 )
-endif ( WIN32 )
+# Browser builds use the external join API and do not use SRP-based auth.
+if( NOT EMSCRIPTEN )
+	FIND_PACKAGE ( OpenSSL REQUIRED )
+	include_directories( ${OPENSSL_INCLUDE_DIR} )
+	set ( ZDOOM_LIBS ${ZDOOM_LIBS} ${OPENSSL_LIBRARIES} )
+	if( WIN32 )
+		set ( ZDOOM_LIBS ${ZDOOM_LIBS} crypt32 )
+	endif ( WIN32 )
+endif( NOT EMSCRIPTEN )
 
 # [AK] We need Opus for encoding/decoding VoIP audio packets, and RNNoise for noise suppression.
 if ( NOT NO_SOUND )
@@ -1065,6 +1078,20 @@ set( NOT_COMPILED_SOURCE_FILES
 	asm_x86_64/tmap3.s
 )
 
+# Auth/SRP sources (OpenSSL-based) are not supported on Emscripten.
+if( EMSCRIPTEN )
+	set( ZANDRONUM_AUTH_SOURCES
+		network/cl_auth_emscripten.cpp
+		network/sv_auth_emscripten.cpp
+	)
+else()
+	set( ZANDRONUM_AUTH_SOURCES
+		network/cl_auth.cpp
+		network/srp.cpp #ZA
+		network/sv_auth.cpp #ZA
+	)
+endif()
+
 # [TP] servercommands.cpp is generated from the protocol specification. CMake needs to know this or it raises an error
 # if it doesn't exist yet.
 set_source_files_properties( ${CMAKE_CURRENT_SOURCE_DIR}/network/servercommands.cpp PROPERTIES GENERATED TRUE )
@@ -1165,13 +1192,11 @@ add_executable( zdoom WIN32
 	name.cpp
 	network.cpp #ST
 	networkshared.cpp #ST
-	network/cl_auth.cpp #ZA
+	${ZANDRONUM_AUTH_SOURCES}
 	network/netcommand.cpp #ZA
 	network/nettraffic.cpp #ST
 	network/packetarchive.cpp #ZA
 	network/servercommands.cpp #ZA
-	network/srp.cpp #ZA
-	network/sv_auth.cpp #ZA
 	nodebuild.cpp
 	nodebuild_classify_nosse2.cpp
 	nodebuild_events.cpp
@@ -1452,6 +1477,30 @@ add_executable( zdoom WIN32
 # [BB] To keep the delta to ZDoom small, we keep the target name 'zdoom', but
 # change the label, so that it's displayed as 'Zandronum' in an IDE like VC++.
 SET_TARGET_PROPERTIES( zdoom PROPERTIES PROJECT_LABEL Zandronum )
+
+if( EMSCRIPTEN )
+	# Make CMake invoke emcc's JS output mode.
+	set_target_properties( zdoom PROPERTIES SUFFIX ".js" )
+
+	# Ensure the SDL port is enabled for compile steps too.
+	# Without this, Emscripten may route <SDL.h> to fakesdl/SDL.h (which hard-errors).
+	target_compile_options( zdoom PRIVATE
+		"-sUSE_SDL=1"
+	)
+
+	# Emscripten link flags.
+	target_link_options( zdoom PRIVATE
+		"-sUSE_SDL=1"
+		"-sALLOW_MEMORY_GROWTH=1"
+		"-sFORCE_FILESYSTEM=1"
+		"-sEXPORTED_RUNTIME_METHODS=callMain"
+		"-sMODULARIZE=1"
+		"-sEXPORT_NAME=createZandronumModule"
+		"-sINVOKE_RUN=0"
+		"-sEXIT_RUNTIME=0"
+		"--preload-file" "${ZDOOM_OUTPUT_DIR}/zandronum.pk3@/zandronum.pk3"
+	)
+endif( EMSCRIPTEN )
 
 # [BB/RC] Added CREATE_PACKET_LOG
 OPTION( CREATE_PACKET_LOG "A security debug feature to catch malicious packets." OFF )
