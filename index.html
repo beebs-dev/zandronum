@@ -392,7 +392,24 @@
         // Kick off the engine in client mode. The IP is a dummy; UDP is bridged over WebRTC.
         // Use the preloaded IWAD so the engine can actually start.
         try {
-          zand.callMain(['-iwad', '/assets/freedoom2.wad', '-file', '/assets/doom1.wad', '-file', '/assets/sunlust.wad', '-connect', '127.0.0.1']);
+          zand.callMain([
+            '-iwad',
+            '/assets/freedoom2.wad',
+            '-file',
+            '/assets/doom1.wad',
+            '-file',
+            '/assets/sunlust.wad',
+            '-connect',
+            '127.0.0.1',
+            // Default volumes in Zandronum are pretty loud for the web client.
+            // Users can still override these in the in-game menus.
+            '+set',
+            'snd_sfxvolume',
+            '0.25',
+            '+set',
+            'snd_musicvolume',
+            '0.25',
+          ]);
         } catch (e) {
           const decoded = tryDecodeCStringPtr(zand, e);
           console.error('callMain threw:', e, typeof e, decoded ? `decoded="${decoded}"` : '');
