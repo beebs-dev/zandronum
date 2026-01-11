@@ -201,6 +201,12 @@ static void ParseStatistics(const char *fn, TArray<FStatistics> &statlist)
 
 void ReadStatistics()
 {
+	// On a fresh install (and in environments like WASM), the stats file may not
+	// exist yet. Treat it as optional.
+	if (!M_DoesFileExist(statfile))
+	{
+		return;
+	}
 	ParseStatistics(statfile, EpisodeStatistics);
 }
 
