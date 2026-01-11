@@ -141,6 +141,19 @@
         setHud('Connecting WebRTC…');
         const room = new LivekitClient.Room({});
 
+        // Chrome blocks audio until a user gesture. LiveKit will warn if it
+        // tries to acquire an AudioContext too early. Resume audio on first
+        // pointer gesture; data channels still work either way.
+        try {
+          window.addEventListener('pointerdown', () => {
+            try {
+              room.startAudio?.().catch(() => {});
+            } catch (_) {}
+          }, { once: true });
+        } catch (_) {
+          // Ignore if addEventListener fails.
+        }
+
         // UDP queue for the WASM side to poll.
         const udpQueue = [];
         const stats = {
@@ -247,6 +260,19 @@
           noInitialRun: true,
           __zanRtc: zanRtc,
           canvas,
+          preRun: [
+            function () {
+              try {
+                // Ensure a writable home + XDG-ish config base exists.
+                // Zandronum uses NicePath("~/.config/") on Unix.
+                if (typeof FS !== 'undefined' && FS.mkdir) {
+                  try { FS.mkdir('/home'); } catch (_) {}
+                  try { FS.mkdir('/home/web_user'); } catch (_) {}
+                  try { FS.mkdir('/home/web_user/.config'); } catch (_) {}
+                }
+              } catch (_) {}
+            },
+          ],
           print: (t) => {
             if (t !== undefined && t !== null && String(t).trim()) {
               console.log(String(t));

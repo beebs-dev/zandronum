@@ -888,6 +888,27 @@ FString NicePath(const char *path)
 		return ExpandEnvVars(path);
 	}
 
+	// Emscripten builds generally do not have a passwd database, so getpwuid()
+	// often fails and would leave paths like "~/.config" unexpanded.
+	// Expand ~ using $HOME (or a default) instead.
+#if defined(__EMSCRIPTEN__)
+	if (path[1] == '/' || path[1] == '\0')
+	{
+		const char *home = getenv("HOME");
+		if (home == NULL || *home == '\0')
+		{
+			home = "/home/web_user";
+		}
+		FString where(home);
+		const char *slash = path + 1;
+		if (*slash != '\0')
+		{
+			where += ExpandEnvVars(slash);
+		}
+		return where;
+	}
+#endif
+
 	passwd *pwstruct;
 	const char *slash;
 
