@@ -48,6 +48,10 @@ WORKDIR /opt/zandronum
 COPY --from=build /src/build/zandronum-server /opt/zandronum/zandronum-server
 COPY --from=build /src/build/zandronum.pk3 /opt/zandronum/zandronum.pk3
 
+RUN mkdir -p /var/wads
+
+VOLUME ["/var/wads"]
+
 EXPOSE 10666/udp
 
-ENTRYPOINT ["/opt/zandronum/zandronum-server"]
+CMD ["/opt/zandronum/zandronum-server", "-iwad", "/var/wads"]
