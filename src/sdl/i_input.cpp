@@ -13,6 +13,7 @@
 #include "d_gui.h"
 #include "c_console.h"
 #ifdef __EMSCRIPTEN__
+#include <emscripten/html5.h>
 // Emscripten's SDL compatibility layer declares some older SDL 1.x APIs but
 // does not always provide implementations. Provide minimal fallbacks.
 extern "C" {
@@ -22,10 +23,36 @@ extern "C" {
 		if (interval) *interval = 0;
 	}
 
+	static bool zan_mousemove_installed = false;
+	static int zan_rel_x = 0;
+	static int zan_rel_y = 0;
+
+	static EM_BOOL zan_mousemove_cb(int /*eventType*/, const EmscriptenMouseEvent *e, void * /*userData*/)
+	{
+		if (!e) return EM_FALSE;
+		// movementX/movementY are populated when pointer lock is active.
+		zan_rel_x += (int)e->movementX;
+		zan_rel_y += (int)e->movementY;
+		return EM_FALSE;
+	}
+
+	static void zan_ensure_mousemove_installed()
+	{
+		if (zan_mousemove_installed) return;
+		zan_mousemove_installed = true;
+		// Use document target so pointer-lock movement is reliably delivered.
+		emscripten_set_mousemove_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, nullptr, true, zan_mousemove_cb);
+	}
+
 	Uint8 SDL_GetRelativeMouseState(int *x, int *y)
 	{
-		if (x) *x = 0;
-		if (y) *y = 0;
+		zan_ensure_mousemove_installed();
+		int dx = zan_rel_x;
+		int dy = zan_rel_y;
+		zan_rel_x = 0;
+		zan_rel_y = 0;
+		if (x) *x = dx;
+		if (y) *y = dy;
 		return SDL_GetMouseState(NULL, NULL);
 	}
 }
