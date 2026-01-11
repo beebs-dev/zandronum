@@ -328,9 +328,16 @@ SDLFB::SDLFB (int width, int height, bool fullscreen)
 	UpdatePending = false;
 	NotPaletted = false;
 	FlashAmount = 0;
-	Screen = SDL_SetVideoMode (width, height, vid_displaybits,
-		(vid_asyncblit ? SDL_ASYNCBLIT : 0)|SDL_HWSURFACE|SDL_HWPALETTE|SDL_DOUBLEBUF|SDL_ANYFORMAT|
-		(fullscreen ? SDL_FULLSCREEN : 0));
+	Uint32 sdlFlags = (vid_asyncblit ? SDL_ASYNCBLIT : 0) | SDL_DOUBLEBUF | SDL_ANYFORMAT |
+		(fullscreen ? SDL_FULLSCREEN : 0);
+#ifdef __EMSCRIPTEN__
+	// Emscripten's SDL surface emulation uses CopyOnLock surfaces.
+	// Requesting SDL_HWPALETTE triggers an abort when SDL_LockSurface is used.
+	sdlFlags |= SDL_SWSURFACE;
+#else
+	sdlFlags |= SDL_HWSURFACE | SDL_HWPALETTE;
+#endif
+	Screen = SDL_SetVideoMode (width, height, vid_displaybits, sdlFlags);
 
 	if (Screen == NULL)
 		return;
@@ -339,7 +346,10 @@ SDLFB::SDLFB (int width, int height, bool fullscreen)
 	{
 		GammaTable[0][i] = GammaTable[1][i] = GammaTable[2][i] = i;
 	}
-	if (Screen->format->palette == NULL)
+	// Emscripten/SDL can report an 8bpp surface with a NULL palette pointer.
+	// Treat 8bpp as paletted regardless, otherwise we may end up calling
+	// GPfx.SetPalette when it is NULL (WASM traps on indirect call).
+	if (Screen->format->palette == NULL && Screen->format->BitsPerPixel > 8)
 	{
 		NotPaletted = true;
 		GPfx.SetFormat (Screen->format->BitsPerPixel,
@@ -490,7 +500,15 @@ void SDLFB::UpdateColors ()
 				256, GammaTable[0][Flash.r], GammaTable[1][Flash.g], GammaTable[2][Flash.b],
 				FlashAmount);
 		}
-		GPfx.SetPalette (palette);
+		if (GPfx.SetPalette != NULL)
+		{
+			GPfx.SetPalette (palette);
+		}
+		else
+		{
+			// If we ended up here without a palette conversion function (e.g. 8bpp
+			// under Emscripten), just skip updating the conversion table.
+		}
 	}
 	else
 	{
