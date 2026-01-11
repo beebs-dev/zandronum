@@ -266,11 +266,23 @@ enum EDefinitionType
 #define GCC_MSEG
 #else
 #define MSVC_ASEG
+#if defined(__EMSCRIPTEN__)
+#define GCC_ASEG __attribute__((used, section(SECTION_AREG)))
+#else
 #define GCC_ASEG __attribute__((section(SECTION_AREG)))
+#endif
 #define MSVC_PSEG
+#if defined(__EMSCRIPTEN__)
+#define GCC_PSEG __attribute__((used, section(SECTION_GREG)))
+#else
 #define GCC_PSEG __attribute__((section(SECTION_GREG)))
+#endif
 #define MSVC_MSEG
+#if defined(__EMSCRIPTEN__)
+#define GCC_MSEG __attribute__((used, section(SECTION_MREG)))
+#else
 #define GCC_MSEG __attribute__((section(SECTION_MREG)))
+#endif
 #endif
 
 

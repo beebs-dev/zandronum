@@ -60,11 +60,19 @@ void *YRegTail = 0;
 
 #include "doomtype.h"
 
+#if defined(__EMSCRIPTEN__)
+void *ARegTail __attribute__((used, section(SECTION_AREG))) = 0;
+void *CRegTail __attribute__((used, section(SECTION_CREG))) = 0;
+void *GRegTail __attribute__((used, section(SECTION_GREG))) = 0;
+void *MRegTail __attribute__((used, section(SECTION_MREG))) = 0;
+void *YRegTail __attribute__((used, section(SECTION_YREG))) = 0;
+#else
 void *ARegTail __attribute__((section(SECTION_AREG))) = 0;
 void *CRegTail __attribute__((section(SECTION_CREG))) = 0;
 void *GRegTail __attribute__((section(SECTION_GREG))) = 0;
 void *MRegTail __attribute__((section(SECTION_MREG))) = 0;
 void *YRegTail __attribute__((section(SECTION_YREG))) = 0;
+#endif
 
 #else
 

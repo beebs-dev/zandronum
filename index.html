@@ -256,10 +256,36 @@
 
         setHud('Starting game…');
 
+        function tryDecodeCStringPtr(mod, ptr) {
+          try {
+            if (!mod || typeof ptr !== 'number' || !Number.isFinite(ptr) || ptr <= 0) return null;
+            const heap = mod.HEAPU8;
+            if (!heap) return null;
+            // Heuristic: treat ptr as pointer to a null-terminated UTF-8 string.
+            const maxLen = 4096;
+            let end = ptr;
+            const maxEnd = Math.min(heap.length, ptr + maxLen);
+            while (end < maxEnd && heap[end] !== 0) end++;
+            if (end === ptr) return '';
+            if (end >= heap.length) return null;
+            return new TextDecoder('utf-8', { fatal: false }).decode(heap.subarray(ptr, end));
+          } catch (_) {
+            return null;
+          }
+        }
+
         const zand = await window.createZandronumModule({
           noInitialRun: true,
           __zanRtc: zanRtc,
           canvas,
+          onAbort: (what) => {
+            const decoded = tryDecodeCStringPtr(zand, what);
+            console.error('Zandronum abort:', what, typeof what, decoded ? `decoded="${decoded}"` : '');
+          },
+          quit: (status, toThrow) => {
+            console.error('Zandronum quit:', { status, toThrowType: typeof toThrow, toThrow });
+            throw toThrow;
+          },
           preRun: [
             function () {
               try {
@@ -306,7 +332,13 @@
 
         // Kick off the engine in client mode. The IP is a dummy; UDP is bridged over WebRTC.
         // Use the preloaded IWAD so the engine can actually start.
-        zand.callMain(['-iwad', '/assets/freedoom2.wad', '-connect', '127.0.0.1']);
+        try {
+          zand.callMain(['-iwad', '/assets/freedoom2.wad', '-connect', '127.0.0.1']);
+        } catch (e) {
+          const decoded = tryDecodeCStringPtr(zand, e);
+          console.error('callMain threw:', e, typeof e, decoded ? `decoded="${decoded}"` : '');
+          throw e;
+        }
 
         if (debugEnabled) {
           // If this never prints, callMain likely never returns (busy loop / no emscripten main loop integration).
@@ -326,8 +358,9 @@
       }
 
       main().catch((e) => {
-        setHud(String(e?.stack || e));
-        console.error(e);
+        const msg = e?.stack || String(e);
+        setHud(String(msg));
+        console.error('main() rejected:', e, typeof e);
       });
     </script>
   </body>

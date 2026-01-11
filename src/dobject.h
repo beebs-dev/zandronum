@@ -174,7 +174,11 @@ private: \
 #	pragma data_seg()
 #	define _DECLARE_TI(cls) __declspec(allocate(".creg$u")) ClassReg *cls::RegistrationInfoPtr = &cls::RegistrationInfo;
 #else
-#	define _DECLARE_TI(cls) ClassReg *cls::RegistrationInfoPtr __attribute__((section(SECTION_CREG))) = &cls::RegistrationInfo;
+#	if defined(__EMSCRIPTEN__)
+#		define _DECLARE_TI(cls) ClassReg *cls::RegistrationInfoPtr __attribute__((used, section(SECTION_CREG))) = &cls::RegistrationInfo;
+#	else
+#		define _DECLARE_TI(cls) ClassReg *cls::RegistrationInfoPtr __attribute__((section(SECTION_CREG))) = &cls::RegistrationInfo;
+#	endif
 #endif
 
 #define _IMP_PCLASS(cls,ptrs,create) \

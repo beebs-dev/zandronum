@@ -88,11 +88,19 @@ void *YRegHead = 0;
 
 #include "doomtype.h"
 
+#if defined(__EMSCRIPTEN__)
+void *ARegHead __attribute__((used, section(SECTION_AREG))) = 0;
+void *CRegHead __attribute__((used, section(SECTION_CREG))) = 0;
+void *GRegHead __attribute__((used, section(SECTION_GREG))) = 0;
+void *MRegHead __attribute__((used, section(SECTION_MREG))) = 0;
+void *YRegHead __attribute__((used, section(SECTION_YREG))) = 0;
+#else
 void *ARegHead __attribute__((section(SECTION_AREG))) = 0;
 void *CRegHead __attribute__((section(SECTION_CREG))) = 0;
 void *GRegHead __attribute__((section(SECTION_GREG))) = 0;
 void *MRegHead __attribute__((section(SECTION_MREG))) = 0;
 void *YRegHead __attribute__((section(SECTION_YREG))) = 0;
+#endif
 
 #else
 
