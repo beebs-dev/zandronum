@@ -9,7 +9,15 @@ echo "Using Data Root: ${DATA_ROOT:-unset}"
 
 cd "$DATA_ROOT"
 
-SERVER=(/opt/zandronum/zandronum-server)
+SERVER=(
+  /opt/zandronum/zandronum-server
+  -iwad /var/wads/freedoom2.wad
+  -file /var/wads/sunlust.wad
+  +sv_coop_damagefactor 1.0
+  +sv_defaultdmflags 0
+  +sv_maxplayers 8
+  +sv_pure false
+)
 
 echo ">>> ${SERVER[*]}"
 "${SERVER[@]}" &
