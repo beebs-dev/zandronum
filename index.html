@@ -75,6 +75,34 @@
         return getParam('q') || getParam('g');
       }
 
+      function extractFirstUuid(text) {
+        const s = String(text ?? '');
+        // Match a canonical UUID (accept any version/variant).
+        const m = s.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/);
+        return m ? m[0] : null;
+      }
+
+      function getGameIdForInfoOrThrow(joinArg) {
+        if (!joinArg) {
+          throw new Error('missing game id (use ?q=<uuid>)');
+        }
+        // If joinArg is already a UUID, use it directly; otherwise try extracting one.
+        const direct = extractFirstUuid(joinArg);
+        if (direct) return direct;
+        throw new Error('missing game id (use ?q=<uuid>)');
+      }
+
+      async function fetchGameInfo(gameId) {
+        const url = `https://api.dorch.beebs.dev/game/${encodeURIComponent(String(gameId))}`;
+        const resp = await fetch(url, { method: 'GET' });
+        if (!resp.ok) {
+          throw new Error(`game info fetch failed: ${resp.status} ${resp.statusText}`);
+        }
+        const json = await resp.json();
+        console.log('game info json:', json);
+        return json;
+      }
+
       function getIdentityFromUrl() {
         return getParam('identity');
       }
@@ -156,8 +184,14 @@
           throw new Error('Emscripten module factory missing (createZandronumModule).');
         }
 
+        // Before attempting to initialize the game or connect over WebRTC,
+        // fetch game info (routed to the master crate; response is a GameSummary JSON).
+        const joinArg = getGameIdFromUrl();
+        const gameId = getGameIdForInfoOrThrow(joinArg);
+        await fetchGameInfo(gameId);
+
         setHud('Joining room…');
-        const { token, url } = await join();
+        const { token, url } = await join(joinArg);
 
         setHud('Connecting WebRTC…');
         const room = new LivekitClient.Room({});
