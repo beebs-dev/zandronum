@@ -103,6 +103,41 @@
         return json;
       }
 
+      function extractWadIdsFromGameInfoJson(gameJson) {
+        // Public GET /game/{id} returns a GameSummary (master crate):
+        //   { game_id, iwad, files?: [uuid], info?: { ... } }
+        // Some callers may expect these under `info`, so support both.
+        const root = gameJson && typeof gameJson === 'object' ? gameJson : {};
+        const maybeInfo = root.info && typeof root.info === 'object' ? root.info : null;
+
+        const iwad = (maybeInfo && maybeInfo.iwad) ? maybeInfo.iwad : root.iwad;
+        const files = (maybeInfo && maybeInfo.files) ? maybeInfo.files : root.files;
+
+        const wadIds = [];
+        if (typeof iwad === 'string' && iwad) wadIds.push(iwad);
+        if (Array.isArray(files)) {
+          for (const f of files) {
+            if (typeof f === 'string' && f) wadIds.push(f);
+          }
+        }
+        return wadIds;
+      }
+
+      async function resolveWadUrls(wadIds) {
+        const url = 'https://api.dorch.beebs.dev/wad_urls';
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ wad_ids: wadIds }),
+        });
+        if (!resp.ok) {
+          throw new Error(`wad_urls failed: ${resp.status} ${resp.statusText}`);
+        }
+        const json = await resp.json();
+        console.log('wad_urls response:', json);
+        return json;
+      }
+
       function getIdentityFromUrl() {
         return getParam('identity');
       }
@@ -188,7 +223,9 @@
         // fetch game info (routed to the master crate; response is a GameSummary JSON).
         const joinArg = getGameIdFromUrl();
         const gameId = getGameIdForInfoOrThrow(joinArg);
-        await fetchGameInfo(gameId);
+        const gameInfoJson = await fetchGameInfo(gameId);
+        const wadIds = extractWadIdsFromGameInfoJson(gameInfoJson);
+        await resolveWadUrls(wadIds);
 
         setHud('Joining room…');
         const { token, url } = await join(joinArg);
