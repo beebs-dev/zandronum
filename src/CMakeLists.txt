@@ -1538,6 +1538,12 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "SunOS")
 	set( ZDOOM_LIBS ${ZDOOM_LIBS} nsl socket)
 endif(${CMAKE_SYSTEM_NAME} STREQUAL "SunOS")
 
+if( SERVERONLY )
+	find_package( CURL REQUIRED )
+	include_directories( ${CURL_INCLUDE_DIRS} )
+	set( ZDOOM_LIBS ${ZDOOM_LIBS} ${CURL_LIBRARIES} )
+endif( SERVERONLY )
+
 # [BB] Added GeoIP, huffman & sqlite
 target_link_libraries( zdoom ${ZDOOM_LIBS} gdtoa dumb lzma GeoIP sqlite3 )
 include_directories( .

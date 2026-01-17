@@ -9,6 +9,7 @@ RUN apt-get update \
 		cmake \
 		git \
 		libbz2-dev \
+		libcurl4-openssl-dev \
 		libjpeg-dev \
 		libsdl1.2-dev \
 		libssl-dev \
@@ -37,6 +38,7 @@ RUN apt-get update \
 	&& apt-get install -y --no-install-recommends \
 		ca-certificates \
 		libbz2-1.0 \
+		libcurl4 \
 		libjpeg62-turbo \
 		libsdl1.2debian \
 		libssl3 \

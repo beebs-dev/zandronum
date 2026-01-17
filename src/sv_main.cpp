@@ -54,6 +54,18 @@
 #include <stdarg.h>
 #include <time.h>
 
+#ifdef SERVER_ONLY
+#include <atomic>
+#include <chrono>
+#include <cstdlib>
+#include <cstring>
+#include <stdio.h>
+#include <string>
+#include <thread>
+
+#include <curl/curl.h>
+#endif
+
 #include "networkheaders.h"
 
 #include "../upnpnat/upnpnat.h"
@@ -98,6 +110,7 @@
 #include "stats.h"
 #include "team.h"
 #include "chat.h"
+#include "voicechat.h"
 #include "v_palette.h"
 #include "v_video.h"
 #include "templates.h"
@@ -232,6 +245,490 @@ static	LONG		g_lInboundDataTransferLastSecond = 0;
 
 // This is the current font the "screen" is using when it displays messages.
 static	char		g_szCurrentFont[16];
+
+#ifdef SERVER_ONLY
+namespace
+{
+	struct DorchSnapshot
+	{
+		int max_players = 0;
+		int player_count = 0;
+		int skill = 0;
+		std::string current_map;
+		long long server_started_at = 0;
+		long long map_started_at = 0;
+		int monster_kill_count = 0;
+		int monster_count = 0;
+		bool has_motd = false;
+		std::string motd;
+
+		bool sv_cheats = false;
+		bool sv_allowchat = true;
+		bool sv_allowvoicechat = false;
+		bool sv_fastmonsters = false;
+		bool sv_monsters = true;
+		bool sv_nomonsters = false;
+
+		bool sv_nojump = false;
+		bool sv_nocrouch = false;
+		bool sv_nofreelook = false;
+
+		// Optional fields in dorch_types::GameInfo
+		bool has_sv_coop_damagefactor = false;
+		float sv_coop_damagefactor = 0.0f;
+		bool has_sv_timelimit = false;
+		int sv_timelimit = 0;
+		bool has_sv_fraglimit = false;
+		int sv_fraglimit = 0;
+		bool has_sv_scorelimit = false;
+		int sv_scorelimit = 0;
+		bool has_sv_duellimit = false;
+		int sv_duellimit = 0;
+	};
+
+	static std::atomic<DorchSnapshot *> g_dorch_snapshot_ptr{ nullptr };
+	static std::atomic<bool> g_dorch_reporter_stop{ false };
+	static std::thread g_dorch_reporter_thread;
+	static bool g_dorch_reporter_started = false;
+	static bool g_dorch_enabled = false;
+	static std::string g_dorch_url;
+	static long long g_dorch_server_started_at_ms = 0;
+	static long long g_dorch_map_started_at_ms = 0;
+	static std::string g_dorch_last_map;
+	static int g_dorch_last_level_time = -1;
+
+	static long long dorch_now_unix_ms( )
+	{
+		using namespace std::chrono;
+		return duration_cast<milliseconds>(system_clock::now( ).time_since_epoch( )).count( );
+	}
+
+	static std::string dorch_json_escape( const std::string &s )
+	{
+		std::string out;
+		out.reserve( s.size( ) + 16 );
+		for ( unsigned char c : s )
+		{
+			switch ( c )
+			{
+			case '\\': out += "\\\\"; break;
+			case '"': out += "\\\""; break;
+			case '\b': out += "\\b"; break;
+			case '\f': out += "\\f"; break;
+			case '\n': out += "\\n"; break;
+			case '\r': out += "\\r"; break;
+			case '\t': out += "\\t"; break;
+			default:
+				if ( c < 0x20 )
+				{
+					char buf[7];
+					snprintf( buf, sizeof( buf ), "\\u%04x", (unsigned)c );
+					out += buf;
+				}
+				else
+				{
+					out.push_back( (char)c );
+				}
+			}
+		}
+		return out;
+	}
+
+	static void dorch_json_field_set_int( std::string &json, bool &first, const char *key, int value )
+	{
+		if ( first == false ) json += ",";
+		first = false;
+		json += "\"";
+		json += key;
+		json += "\":{\"op\":\"set\",\"value\":";
+		json += std::to_string( value );
+		json += "}";
+	}
+
+	static void dorch_json_field_set_i64( std::string &json, bool &first, const char *key, long long value )
+	{
+		if ( first == false ) json += ",";
+		first = false;
+		json += "\"";
+		json += key;
+		json += "\":{\"op\":\"set\",\"value\":";
+		json += std::to_string( value );
+		json += "}";
+	}
+
+	static void dorch_json_field_set_bool( std::string &json, bool &first, const char *key, bool value )
+	{
+		if ( first == false ) json += ",";
+		first = false;
+		json += "\"";
+		json += key;
+		json += "\":{\"op\":\"set\",\"value\":";
+		json += ( value ? "true" : "false" );
+		json += "}";
+	}
+
+	static void dorch_json_field_set_float( std::string &json, bool &first, const char *key, float value )
+	{
+		if ( first == false ) json += ",";
+		first = false;
+		json += "\"";
+		json += key;
+		json += "\":{\"op\":\"set\",\"value\":";
+		char buf[64];
+		snprintf( buf, sizeof( buf ), "%.6g", (double)value );
+		json += buf;
+		json += "}";
+	}
+
+	static void dorch_json_field_set_string( std::string &json, bool &first, const char *key, const std::string &value )
+	{
+		if ( first == false ) json += ",";
+		first = false;
+		json += "\"";
+		json += key;
+		json += "\":{\"op\":\"set\",\"value\":\"";
+		json += dorch_json_escape( value );
+		json += "\"}";
+	}
+
+	static void dorch_json_field_unset( std::string &json, bool &first, const char *key )
+	{
+		if ( first == false ) json += ",";
+		first = false;
+		json += "\"";
+		json += key;
+		json += "\":{\"op\":\"unset\"}";
+	}
+
+	static std::string dorch_build_update_json( const DorchSnapshot &s )
+	{
+		std::string json;
+		json.reserve( 768 );
+		json += "{";
+		bool first = true;
+
+		dorch_json_field_set_int( json, first, "max_players", s.max_players );
+		dorch_json_field_set_int( json, first, "player_count", s.player_count );
+		dorch_json_field_set_int( json, first, "skill", s.skill );
+		dorch_json_field_set_string( json, first, "current_map", s.current_map );
+		dorch_json_field_set_i64( json, first, "server_started_at", s.server_started_at );
+		dorch_json_field_set_i64( json, first, "map_started_at", s.map_started_at );
+		dorch_json_field_set_int( json, first, "monster_kill_count", s.monster_kill_count );
+		dorch_json_field_set_int( json, first, "monster_count", s.monster_count );
+		if ( s.has_motd )
+			dorch_json_field_set_string( json, first, "motd", s.motd );
+		else
+			dorch_json_field_unset( json, first, "motd" );
+
+		dorch_json_field_set_bool( json, first, "sv_cheats", s.sv_cheats );
+		dorch_json_field_set_bool( json, first, "sv_allowchat", s.sv_allowchat );
+		dorch_json_field_set_bool( json, first, "sv_allowvoicechat", s.sv_allowvoicechat );
+		dorch_json_field_set_bool( json, first, "sv_fastmonsters", s.sv_fastmonsters );
+		dorch_json_field_set_bool( json, first, "sv_monsters", s.sv_monsters );
+		dorch_json_field_set_bool( json, first, "sv_nomonsters", s.sv_nomonsters );
+
+		// Not present in this Zandronum tree; keep master state clean.
+		dorch_json_field_unset( json, first, "sv_itemsrespawn" );
+		dorch_json_field_unset( json, first, "sv_itemrespawntime" );
+
+		if ( s.has_sv_coop_damagefactor )
+			dorch_json_field_set_float( json, first, "sv_coop_damagefactor", s.sv_coop_damagefactor );
+		else
+			dorch_json_field_unset( json, first, "sv_coop_damagefactor" );
+
+		dorch_json_field_set_bool( json, first, "sv_nojump", s.sv_nojump );
+		dorch_json_field_set_bool( json, first, "sv_nocrouch", s.sv_nocrouch );
+		dorch_json_field_set_bool( json, first, "sv_nofreelook", s.sv_nofreelook );
+		// Not present in this tree.
+		dorch_json_field_unset( json, first, "sv_respawnonexit" );
+
+		if ( s.has_sv_timelimit )
+			dorch_json_field_set_int( json, first, "sv_timelimit", s.sv_timelimit );
+		else
+			dorch_json_field_unset( json, first, "sv_timelimit" );
+		if ( s.has_sv_fraglimit )
+			dorch_json_field_set_int( json, first, "sv_fraglimit", s.sv_fraglimit );
+		else
+			dorch_json_field_unset( json, first, "sv_fraglimit" );
+		if ( s.has_sv_scorelimit )
+			dorch_json_field_set_int( json, first, "sv_scorelimit", s.sv_scorelimit );
+		else
+			dorch_json_field_unset( json, first, "sv_scorelimit" );
+		if ( s.has_sv_duellimit )
+			dorch_json_field_set_int( json, first, "sv_duellimit", s.sv_duellimit );
+		else
+			dorch_json_field_unset( json, first, "sv_duellimit" );
+		// Not present in this tree.
+		dorch_json_field_unset( json, first, "sv_roundlimit" );
+
+		// Not present in this tree.
+		dorch_json_field_unset( json, first, "sv_allowrun" );
+		dorch_json_field_unset( json, first, "sv_allowfreelook" );
+
+		json += "}";
+		return json;
+	}
+
+	static bool dorch_snapshot_equals( const DorchSnapshot &a, const DorchSnapshot &b )
+	{
+		return a.max_players == b.max_players &&
+				a.player_count == b.player_count &&
+				a.skill == b.skill &&
+				a.current_map == b.current_map &&
+				a.server_started_at == b.server_started_at &&
+				a.map_started_at == b.map_started_at &&
+				a.monster_kill_count == b.monster_kill_count &&
+				a.monster_count == b.monster_count &&
+				a.has_motd == b.has_motd &&
+				a.motd == b.motd &&
+				a.sv_cheats == b.sv_cheats &&
+				a.sv_allowchat == b.sv_allowchat &&
+				a.sv_allowvoicechat == b.sv_allowvoicechat &&
+				a.sv_fastmonsters == b.sv_fastmonsters &&
+				a.sv_monsters == b.sv_monsters &&
+				a.sv_nomonsters == b.sv_nomonsters &&
+				a.sv_nojump == b.sv_nojump &&
+				a.sv_nocrouch == b.sv_nocrouch &&
+				a.sv_nofreelook == b.sv_nofreelook &&
+				a.has_sv_coop_damagefactor == b.has_sv_coop_damagefactor &&
+				a.sv_coop_damagefactor == b.sv_coop_damagefactor &&
+				a.has_sv_timelimit == b.has_sv_timelimit &&
+				a.sv_timelimit == b.sv_timelimit &&
+				a.has_sv_fraglimit == b.has_sv_fraglimit &&
+				a.sv_fraglimit == b.sv_fraglimit &&
+				a.has_sv_scorelimit == b.has_sv_scorelimit &&
+				a.sv_scorelimit == b.sv_scorelimit &&
+				a.has_sv_duellimit == b.has_sv_duellimit &&
+				a.sv_duellimit == b.sv_duellimit;
+	}
+
+	static bool dorch_post_update_json( const std::string &url, const std::string &payload )
+	{
+		CURL *curl = curl_easy_init( );
+		if ( curl == nullptr )
+		{
+			fprintf( stderr, "dorch reporter: curl_easy_init failed\n" );
+			return false;
+		}
+
+		struct curl_slist *headers = nullptr;
+		headers = curl_slist_append( headers, "Content-Type: application/json" );
+
+		curl_easy_setopt( curl, CURLOPT_URL, url.c_str( ) );
+		curl_easy_setopt( curl, CURLOPT_HTTPHEADER, headers );
+		curl_easy_setopt( curl, CURLOPT_POST, 1L );
+		curl_easy_setopt( curl, CURLOPT_POSTFIELDS, payload.c_str( ) );
+		curl_easy_setopt( curl, CURLOPT_POSTFIELDSIZE, (long)payload.size( ) );
+		curl_easy_setopt( curl, CURLOPT_TIMEOUT_MS, 5000L );
+		curl_easy_setopt( curl, CURLOPT_NOSIGNAL, 1L );
+		curl_easy_setopt( curl, CURLOPT_USERAGENT, "dorch-zandronum/1" );
+
+		CURLcode rc = curl_easy_perform( curl );
+		long http_code = 0;
+		curl_easy_getinfo( curl, CURLINFO_RESPONSE_CODE, &http_code );
+
+		curl_slist_free_all( headers );
+		curl_easy_cleanup( curl );
+
+		if ( rc != CURLE_OK )
+		{
+			fprintf( stderr, "dorch reporter: POST failed (%s)\n", curl_easy_strerror( rc ) );
+			return false;
+		}
+		if ( http_code < 200 || http_code >= 300 )
+		{
+			fprintf( stderr, "dorch reporter: POST got HTTP %ld\n", http_code );
+			return false;
+		}
+		return true;
+	}
+
+	static void dorch_reporter_loop( std::chrono::steady_clock::time_point start_time )
+	{
+		if ( curl_global_init( CURL_GLOBAL_DEFAULT ) != 0 )
+		{
+			fprintf( stderr, "dorch reporter: curl_global_init failed\n" );
+			return;
+		}
+
+		DorchSnapshot *last_sent = nullptr;
+		DorchSnapshot *pending = nullptr;
+		auto last_post_time = std::chrono::steady_clock::time_point::min( );
+
+		while ( g_dorch_reporter_stop.load( std::memory_order_acquire ) == false )
+		{
+			DorchSnapshot *taken = g_dorch_snapshot_ptr.exchange( nullptr, std::memory_order_acq_rel );
+			if ( taken != nullptr )
+			{
+				if ( pending != nullptr )
+					delete pending;
+				pending = taken;
+			}
+
+			auto now = std::chrono::steady_clock::now( );
+			const bool startup_delay_done = ( now - start_time ) >= std::chrono::seconds( 1 );
+			const bool throttle_ok = ( last_post_time == std::chrono::steady_clock::time_point::min( ) ) ||
+				( ( now - last_post_time ) >= std::chrono::seconds( 5 ) );
+
+			if ( pending != nullptr && startup_delay_done )
+			{
+				const bool changed = ( last_sent == nullptr ) || ( dorch_snapshot_equals( *pending, *last_sent ) == false );
+				if ( changed && throttle_ok )
+				{
+					std::string payload = dorch_build_update_json( *pending );
+					if ( dorch_post_update_json( g_dorch_url, payload ) )
+					{
+						if ( last_sent != nullptr )
+							delete last_sent;
+						last_sent = pending;
+						pending = nullptr;
+						last_post_time = now;
+					}
+				}
+			}
+
+			std::this_thread::sleep_for( std::chrono::milliseconds( 331 ) );
+		}
+
+		if ( pending != nullptr )
+			delete pending;
+		if ( last_sent != nullptr )
+			delete last_sent;
+		curl_global_cleanup( );
+	}
+
+	static std::string dorch_join_url( const char *base, const char *game_id )
+	{
+		std::string b = base ? base : "";
+		while ( b.empty( ) == false && b.back( ) == '/' )
+			b.pop_back( );
+		std::string url = b;
+		url += "/game/";
+		url += game_id;
+		url += "/info";
+		return url;
+	}
+
+	static void dorch_start_reporter_if_configured( void )
+	{
+		if ( g_dorch_reporter_started )
+			return;
+		const char *game_id = std::getenv( "GAME_ID" );
+		const char *base = std::getenv( "MASTER_BASE_URL" );
+		if ( game_id == nullptr || base == nullptr || std::strlen( game_id ) == 0 || std::strlen( base ) == 0 )
+		{
+			fprintf( stderr, "dorch reporter: disabled (missing GAME_ID or MASTER_BASE_URL)\n" );
+			g_dorch_enabled = false;
+			return;
+		}
+		g_dorch_url = dorch_join_url( base, game_id );
+		g_dorch_server_started_at_ms = dorch_now_unix_ms( );
+		g_dorch_map_started_at_ms = 0;
+		g_dorch_last_map.clear( );
+		g_dorch_last_level_time = -1;
+		g_dorch_enabled = true;
+		g_dorch_reporter_stop.store( false, std::memory_order_release );
+		g_dorch_reporter_thread = std::thread( dorch_reporter_loop, std::chrono::steady_clock::now( ) );
+		g_dorch_reporter_started = true;
+		fprintf( stderr, "dorch reporter: enabled url=%s\n", g_dorch_url.c_str( ) );
+	}
+
+	static void dorch_stop_reporter( void )
+	{
+		if ( g_dorch_reporter_started == false )
+			return;
+		g_dorch_reporter_stop.store( true, std::memory_order_release );
+		if ( g_dorch_reporter_thread.joinable( ) )
+			g_dorch_reporter_thread.join( );
+		g_dorch_reporter_started = false;
+		g_dorch_enabled = false;
+
+		DorchSnapshot *leftover = g_dorch_snapshot_ptr.exchange( nullptr, std::memory_order_acq_rel );
+		if ( leftover != nullptr )
+			delete leftover;
+	}
+
+	static void dorch_publish_snapshot_main_thread( void )
+	{
+		if ( g_dorch_enabled == false )
+			return;
+		if ( gamestate != GS_LEVEL )
+			return;
+
+		// Track map load/restart time.
+		// - Map change: level.mapname changes
+		// - Map restart: level.time resets (drops)
+		const char *mapname = level.mapname;
+		if ( g_dorch_last_map.empty( ) || g_dorch_last_map != mapname || ( g_dorch_last_level_time >= 0 && level.time < g_dorch_last_level_time ) )
+		{
+			g_dorch_last_map = mapname;
+			g_dorch_map_started_at_ms = dorch_now_unix_ms( );
+		}
+		g_dorch_last_level_time = level.time;
+
+		DorchSnapshot *s = new DorchSnapshot( );
+		s->max_players = (int)sv_maxplayers;
+		s->player_count = (int)SERVER_CountPlayers( true );
+		s->skill = (int)gameskill;
+		s->current_map = level.mapname;
+		s->server_started_at = g_dorch_server_started_at_ms;
+		s->map_started_at = g_dorch_map_started_at_ms;
+		s->monster_kill_count = level.killed_monsters;
+		s->monster_count = level.total_monsters;
+
+		{
+			FString motd = *sv_motd;
+			if ( motd.IsNotEmpty( ) )
+			{
+				s->has_motd = true;
+				s->motd = motd.GetChars( );
+			}
+		}
+
+		s->sv_cheats = (bool)sv_cheats;
+		// This tree doesn't expose a single "sv_allowchat" cvar; approximate using private-chat setting.
+		s->sv_allowchat = ( sv_allowprivatechat != PRIVATECHAT_OFF );
+		s->sv_allowvoicechat = ( sv_allowvoicechat != VOICECHAT_OFF );
+		s->sv_fastmonsters = ( ( dmflags & DF_FAST_MONSTERS ) != 0 );
+		s->sv_nomonsters = ( ( dmflags & DF_NO_MONSTERS ) != 0 );
+		s->sv_monsters = !s->sv_nomonsters;
+		s->sv_nojump = ( ( dmflags & DF_NO_JUMP ) != 0 );
+		s->sv_nocrouch = ( ( dmflags & DF_NO_CROUCH ) != 0 );
+		s->sv_nofreelook = ( ( dmflags & DF_NO_FREELOOK ) != 0 );
+
+		if ( GAMEMODE_IsTimelimitActive( ) && timelimit > 0.0f )
+		{
+			s->has_sv_timelimit = true;
+			s->sv_timelimit = (int)timelimit;
+		}
+		if ( fraglimit > 0 )
+		{
+			s->has_sv_fraglimit = true;
+			s->sv_fraglimit = (int)fraglimit;
+		}
+		if ( pointlimit > 0 )
+		{
+			s->has_sv_scorelimit = true;
+			s->sv_scorelimit = (int)pointlimit;
+		}
+		if ( duellimit > 0 )
+		{
+			s->has_sv_duellimit = true;
+			s->sv_duellimit = (int)duellimit;
+		}
+
+		if ( ( GAMEMODE_GetCurrentFlags( ) & GMF_COOPERATIVE ) && ( sv_coop_damagefactor != 1.0f ) )
+		{
+			s->has_sv_coop_damagefactor = true;
+			s->sv_coop_damagefactor = (float)sv_coop_damagefactor;
+		}
+
+		DorchSnapshot *old = g_dorch_snapshot_ptr.exchange( s, std::memory_order_acq_rel );
+		if ( old != nullptr )
+			delete old;
+	}
+}
+#endif
 
 // This is the music the loaded map is currently using.
 static	FString		g_MapMusic;
@@ -608,6 +1105,10 @@ void SERVER_Construct( void )
 	}
 	// [BB] The voodoo doll dummy player also needs its userinfo reset.
 	COOP_InitVoodooDollDummyPlayer();
+
+#ifdef SERVER_ONLY
+	dorch_start_reporter_if_configured( );
+#endif
 }
 
 //*****************************************************************************
@@ -615,6 +1116,10 @@ void SERVER_Construct( void )
 void SERVER_Destruct( void )
 {
 	ULONG	ulIdx;
+
+#ifdef SERVER_ONLY
+	dorch_stop_reporter( );
+#endif
 
 	// Free the clients' buffers.
 	for ( ulIdx = 0; ulIdx < MAXPLAYERS; ulIdx++ )
@@ -808,6 +1313,13 @@ void SERVER_Tick( void )
 
 		// Check everyone's PacketBuffer for anything that needs to be sent.
 		SERVER_SendOutPackets( );
+
+#ifdef SERVER_ONLY
+		// Publish a fresh snapshot without blocking.
+		// Reporter thread polls and diffs/throttles POSTs to the master.
+		if ( ( gametic % 12 ) == 0 )
+			dorch_publish_snapshot_main_thread( );
+#endif
 
 		// [BB] Send out sheduled packets, respecting sv_maxpacketspertick.
 		for ( unsigned int i = 0; i < MAXPLAYERS; i++ )
