@@ -97,7 +97,7 @@
 
         const joinUrl = (arg.startsWith('http://') || arg.startsWith('https://'))
           ? arg
-          : `https://api.synapse.beebs.dev/room/${arg}/join`;
+          : `https://api.dorch.beebs.dev/auth/${arg}`;
 
         // If ?name=<name> is present, forward it to the join API.
         let finalJoinUrl = joinUrl;
