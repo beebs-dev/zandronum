@@ -43,6 +43,8 @@ RUN apt-get update \
 		libsdl1.2debian \
 		libssl3 \
 		zlib1g \
+		xxd \
+		file \
 	&& rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/zandronum
