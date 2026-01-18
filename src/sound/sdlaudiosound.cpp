@@ -5,10 +5,21 @@
 #include <SDL.h>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <deque>
+#include <mutex>
+#include <string>
+#include <thread>
 #include <vector>
+
+#ifndef _WIN32
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 #include "c_cvars.h"
 #include "i_system.h"
@@ -247,15 +258,57 @@ struct SDLAudioSoundRenderer::Impl
 {
 	SDL_AudioSpec obtained{};
 	bool audioOk = false;
+	bool useSDL = false;
+	bool headless = false;
 	float sfxVolume = 1.0f;
 	float musicVolume = 1.0f;
 	bool sfxPaused = false;
 	EInactiveState inactive = INACTIVE_Active;
 
+	std::mutex audioMutex;
+	std::atomic<bool> headlessRunning{false};
+	std::thread headlessThread;
+	std::string fifoPath;
+#ifndef _WIN32
+	int fifoFd = -1;
+#endif
+
 	std::vector<SDLChannel> channels;
 	std::vector<FISoundChannel *> ended;
 
 	CallbackSoundStream *musicStream = nullptr;
+
+	void LockAudio()
+	{
+		if (useSDL)
+			SDL_LockAudio();
+		else
+			audioMutex.lock();
+	}
+
+	void UnlockAudio()
+	{
+		if (useSDL)
+			SDL_UnlockAudio();
+		else
+			audioMutex.unlock();
+	}
+
+	void StopHeadless()
+	{
+		if (!headlessRunning.load())
+			return;
+		headlessRunning.store(false);
+		if (headlessThread.joinable())
+			headlessThread.join();
+#ifndef _WIN32
+		if (fifoFd >= 0)
+		{
+			close(fifoFd);
+			fifoFd = -1;
+		}
+#endif
+	}
 
 	static void SDLCALL AudioCallback(void *userdata, Uint8 *stream, int len)
 	{
@@ -350,11 +403,77 @@ struct SDLAudioSoundRenderer::Impl
 
 		if (SDL_OpenAudio(&want, &obtained) < 0)
 		{
-			Printf(TEXTCOLOR_RED"SDL audio: SDL_OpenAudio failed: %s\n", SDL_GetError());
-			audioOk = false;
+			// In container/headless environments there may be no ALSA device.
+			// If requested, run a headless mixer loop that still produces PCM.
+			const char *headlessEnv = getenv("DORCH_HEADLESS_AUDIO");
+			const char *fifoEnv = getenv("DORCH_AUDIO_FIFO");
+			const bool wantHeadless =
+				(headlessEnv != nullptr && headlessEnv[0] != '\0' && strcmp(headlessEnv, "0") != 0) ||
+				(fifoEnv != nullptr && fifoEnv[0] != '\0');
+
+			if (!wantHeadless)
+			{
+				Printf(TEXTCOLOR_RED"SDL audio: SDL_OpenAudio failed: %s\n", SDL_GetError());
+				audioOk = false;
+				return;
+			}
+
+			useSDL = false;
+			headless = true;
+			obtained = want;
+			if (obtained.freq <= 0) obtained.freq = 44100;
+			channels.resize(32);
+			audioOk = true;
+			if (fifoEnv != nullptr && fifoEnv[0] != '\0')
+			{
+				fifoPath = fifoEnv;
+			}
+
+			headlessRunning.store(true);
+			headlessThread = std::thread([this]() {
+				const int frames = (obtained.samples > 0) ? obtained.samples : 1024;
+				const int bytesPerFrame = (int)(sizeof(int16_t) * 2);
+				const int len = frames * bytesPerFrame;
+				std::vector<uint8_t> buffer((size_t)len);
+				const int outRate = (obtained.freq > 0) ? obtained.freq : 44100;
+
+				while (headlessRunning.load())
+				{
+					// Serialize with main thread updates.
+					audioMutex.lock();
+					AudioCallback(this, buffer.data(), len);
+					audioMutex.unlock();
+
+					// Optional: write to FIFO for ffmpeg capture.
+#ifndef _WIN32
+					if (!fifoPath.empty())
+					{
+						if (fifoFd < 0)
+						{
+							fifoFd = open(fifoPath.c_str(), O_RDWR | O_NONBLOCK);
+						}
+						if (fifoFd >= 0)
+						{
+							ssize_t w = write(fifoFd, buffer.data(), (size_t)len);
+							(void)w;
+							if (w < 0 && (errno == EPIPE || errno == EBADF))
+							{
+								close(fifoFd);
+								fifoFd = -1;
+							}
+						}
+					}
+#endif
+
+					std::this_thread::sleep_for(std::chrono::microseconds((long long)frames * 1000000LL / outRate));
+				}
+			});
+
+			Printf("SDL audio: headless mixer started (%d Hz)\n", obtained.freq);
 			return;
 		}
 
+		useSDL = true;
 		channels.resize(32);
 		SDL_PauseAudio(0);
 		audioOk = true;
@@ -402,10 +521,17 @@ SDLAudioSoundRenderer::~SDLAudioSoundRenderer()
 	{
 		if (P->audioOk)
 		{
-			SDL_LockAudio();
+			P->LockAudio();
 			for (auto &c : P->channels) c.active = false;
-			SDL_UnlockAudio();
-			SDL_CloseAudio();
+			P->UnlockAudio();
+			if (P->useSDL)
+			{
+				SDL_CloseAudio();
+			}
+			else if (P->headless)
+			{
+				P->StopHeadless();
+			}
 		}
 		delete P;
 		P = nullptr;
@@ -496,7 +622,7 @@ void SDLAudioSoundRenderer::UnloadSound(SoundHandle sfx)
 	if (!s) return;
 	if (P && P->audioOk)
 	{
-		SDL_LockAudio();
+		P->LockAudio();
 		for (auto &c : P->channels)
 		{
 			if (c.active && c.sample == s)
@@ -507,7 +633,7 @@ void SDLAudioSoundRenderer::UnloadSound(SoundHandle sfx)
 				c.owner = nullptr;
 			}
 		}
-		SDL_UnlockAudio();
+		P->UnlockAudio();
 	}
 	delete s;
 }
@@ -543,7 +669,7 @@ SoundStream *SDLAudioSoundRenderer::CreateStream(SoundStreamCallback callback, i
 		return new NullSoundStream();
 	}
 
-	SDL_LockAudio();
+	P->LockAudio();
 	// Only one music stream for now.
 	if (P->musicStream != nullptr)
 	{
@@ -551,7 +677,7 @@ SoundStream *SDLAudioSoundRenderer::CreateStream(SoundStreamCallback callback, i
 		P->musicStream = nullptr;
 	}
 	P->musicStream = new CallbackSoundStream(callback, buffbytes, flags, samplerate, userdata);
-	SDL_UnlockAudio();
+	P->UnlockAudio();
 	return P->musicStream;
 }
 
@@ -570,9 +696,9 @@ long SDLAudioSoundRenderer::PlayStream(SoundStream *stream, int volume)
 void SDLAudioSoundRenderer::StopStream(SoundStream *stream)
 {
 	if (!P || !P->audioOk || stream == nullptr) return;
-	SDL_LockAudio();
+	P->LockAudio();
 	if (P->musicStream == stream) P->musicStream = nullptr;
-	SDL_UnlockAudio();
+	P->UnlockAudio();
 	stream->Stop();
 }
 
@@ -593,11 +719,11 @@ FISoundChannel *SDLAudioSoundRenderer::StartSound(SoundHandle sfx, float vol, in
 		return ichan;
 	}
 
-	SDL_LockAudio();
+	P->LockAudio();
 	SDLChannel *c = P->AllocChannel(ichan);
 	if (!c)
 	{
-		SDL_UnlockAudio();
+		P->UnlockAudio();
 		ichan->SysChannel = NULL;
 		return ichan;
 	}
@@ -610,7 +736,7 @@ FISoundChannel *SDLAudioSoundRenderer::StartSound(SoundHandle sfx, float vol, in
 	int inRate = std::max(1, s->rate);
 	c->step = (uint32_t)(((uint64_t)inRate << 16) / (uint64_t)outRate);
 	ichan->SysChannel = c;
-	SDL_UnlockAudio();
+	P->UnlockAudio();
 
 	return ichan;
 }
@@ -623,7 +749,7 @@ FISoundChannel *SDLAudioSoundRenderer::StartSound3D(SoundHandle sfx, SoundListen
 void SDLAudioSoundRenderer::StopChannel(FISoundChannel *chan)
 {
 	if (!P || !P->audioOk || chan == nullptr) return;
-	SDL_LockAudio();
+	P->LockAudio();
 	SDLChannel *c = (SDLChannel *)chan->SysChannel;
 	if (c)
 	{
@@ -632,16 +758,16 @@ void SDLAudioSoundRenderer::StopChannel(FISoundChannel *chan)
 		c->owner = nullptr;
 	}
 	chan->SysChannel = NULL;
-	SDL_UnlockAudio();
+	P->UnlockAudio();
 }
 
 void SDLAudioSoundRenderer::ChannelVolume(FISoundChannel *chan, float volume)
 {
 	if (!P || !P->audioOk || chan == nullptr) return;
-	SDL_LockAudio();
+	P->LockAudio();
 	SDLChannel *c = (SDLChannel *)chan->SysChannel;
 	if (c) c->volume = std::max(0.0f, volume);
-	SDL_UnlockAudio();
+	P->UnlockAudio();
 }
 
 void SDLAudioSoundRenderer::MarkStartTime(FISoundChannel * /*chan*/)
@@ -651,20 +777,20 @@ void SDLAudioSoundRenderer::MarkStartTime(FISoundChannel * /*chan*/)
 unsigned int SDLAudioSoundRenderer::GetPosition(FISoundChannel *chan)
 {
 	if (!P || !P->audioOk || chan == nullptr) return 0;
-	SDL_LockAudio();
+	P->LockAudio();
 	SDLChannel *c = (SDLChannel *)chan->SysChannel;
 	unsigned int pos = c ? (unsigned int)(c->pos >> 16) : 0;
-	SDL_UnlockAudio();
+	P->UnlockAudio();
 	return pos;
 }
 
 float SDLAudioSoundRenderer::GetAudibility(FISoundChannel *chan)
 {
 	if (!P || !P->audioOk || chan == nullptr) return 0.0f;
-	SDL_LockAudio();
+	P->LockAudio();
 	SDLChannel *c = (SDLChannel *)chan->SysChannel;
 	float a = c ? c->volume : 0.0f;
-	SDL_UnlockAudio();
+	P->UnlockAudio();
 	return a;
 }
 
@@ -675,17 +801,17 @@ void SDLAudioSoundRenderer::Sync(bool /*sync*/)
 void SDLAudioSoundRenderer::SetSfxPaused(bool paused, int /*slot*/)
 {
 	if (!P) return;
-	SDL_LockAudio();
+	P->LockAudio();
 	P->sfxPaused = paused;
-	SDL_UnlockAudio();
+	P->UnlockAudio();
 }
 
 void SDLAudioSoundRenderer::SetInactive(EInactiveState inactive)
 {
 	if (!P) return;
-	SDL_LockAudio();
+	P->LockAudio();
 	P->inactive = inactive;
-	SDL_UnlockAudio();
+	P->UnlockAudio();
 }
 
 void SDLAudioSoundRenderer::UpdateSoundParams3D(SoundListener * /*listener*/, FISoundChannel * /*chan*/, bool /*areasound*/, const FVector3 & /*pos*/, const FVector3 & /*vel*/)
@@ -701,9 +827,9 @@ void SDLAudioSoundRenderer::UpdateSounds()
 	if (!P || !P->audioOk) return;
 
 	std::vector<FISoundChannel *> ended;
-	SDL_LockAudio();
+	P->LockAudio();
 	ended.swap(P->ended);
-	SDL_UnlockAudio();
+	P->UnlockAudio();
 
 	for (auto *c : ended)
 	{

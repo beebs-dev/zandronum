@@ -18,7 +18,7 @@ fast_exit() {
   exit 0
 }
 trap fast_exit TERM INT
-
+DEBUG_AUDIO=${DEBUG_AUDIO:-1}
 SERVER_ADDR=${SERVER_ADDR:-localhost:10666}
 IWAD_PATH=${IWAD_PATH:-/var/wads/iwad.wad}
 WAD_LIST=${WAD_LIST:-""}
@@ -44,40 +44,135 @@ echo "Spectator starting, connecting to $SERVER_ADDR using IWAD $IWAD_PATH"
 # Start a local PulseAudio daemon so we can capture game audio from a monitor
 # source (stream.monitor) and push it out via ffmpeg.
 have_pulse=0
+pulse_monitor_source=""
 if command -v pulseaudio >/dev/null 2>&1 && command -v pactl >/dev/null 2>&1; then
-  export SDL_AUDIODRIVER=${SDL_AUDIODRIVER:-pulse}
+  # SDL 1.2 frequently does not support native PulseAudio output, but it does
+  # support ALSA. With libasound2-plugins installed, ALSA can route to Pulse.
+  export SDL_AUDIODRIVER=${SDL_AUDIODRIVER:-alsa}
 
-  # Try system-mode first (works well in containers), then fall back.
-  pulseaudio --system --daemonize=yes --exit-idle-time=-1 --disallow-exit --log-target=stderr 2>/dev/null || \
-  pulseaudio --daemonize=yes --exit-idle-time=-1 --disallow-exit --log-target=stderr 2>/dev/null || true
+  # Give Pulse a predictable runtime dir/socket path.
+  export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp/xdg-runtime}
+  mkdir -p "$XDG_RUNTIME_DIR"
+  chmod 700 "$XDG_RUNTIME_DIR" || true
+
+  # Make the Pulse socket location explicit for all clients.
+  export PULSE_RUNTIME_PATH="${PULSE_RUNTIME_PATH:-${XDG_RUNTIME_DIR}/pulse}"
+  mkdir -p "$PULSE_RUNTIME_PATH" || true
+  chmod 777 "$PULSE_RUNTIME_PATH" 2>/dev/null || true
+  export PULSE_SERVER="${PULSE_SERVER:-unix:${PULSE_RUNTIME_PATH}/native}"
+
+  # Kill any stale daemon and start a minimal PulseAudio instance with a known
+  # unix socket path and anonymous auth (so root/other users can connect).
+  pulseaudio -k 2>/dev/null || true
+
+  pulseaudio_args=(
+    --daemonize=yes
+    --exit-idle-time=-1
+    --disallow-exit
+    --disable-shm=yes
+    --log-target=stderr
+    -n
+    -L "module-native-protocol-unix socket=${PULSE_RUNTIME_PATH}/native auth-anonymous=1"
+    -L "module-null-sink sink_name=stream sink_properties=device.description=stream"
+    -L "module-always-sink"
+  )
+
+  if [[ "$(id -u)" == "0" ]]; then
+    pulseaudio --system "${pulseaudio_args[@]}" 2>/dev/null || true
+  else
+    pulseaudio "${pulseaudio_args[@]}" 2>/dev/null || true
+  fi
 
   # Give PulseAudio a moment to create its socket.
   sleep 0.2
 
   if pactl info >/dev/null 2>&1; then
+    # Route ALSA default device to PulseAudio (used by SDL when SDL_AUDIODRIVER=alsa).
+    # This is safe even if the pulse ALSA plugin isn't present; ALSA will fall back.
+    if [[ -w /etc ]]; then
+      cat >/etc/asound.conf <<'EOF'
+pcm.!default {
+  type pulse
+  fallback "sysdefault"
+}
+ctl.!default {
+  type pulse
+}
+EOF
+    fi
+
     pactl load-module module-null-sink sink_name=stream sink_properties=device.description=stream >/dev/null 2>&1 || true
     pactl set-default-sink stream >/dev/null 2>&1 || true
+    pactl set-sink-mute stream 0 >/dev/null 2>&1 || true
+    pactl set-sink-volume stream 100% >/dev/null 2>&1 || true
 
-    if pactl list short sources 2>/dev/null | awk '{print $2}' | grep -qx 'stream.monitor'; then
-      have_pulse=1
+    # Also hint pulse clients to go to the right sink.
+    export PULSE_SINK=stream
+
+    # Wait briefly for the monitor source to appear.
+    for _i in 1 2 3 4 5 6 7 8 9 10; do
+      if pactl list short sources 2>/dev/null | awk '{print $2}' | grep -qx 'stream.monitor'; then
+        have_pulse=1
+        pulse_monitor_source="stream.monitor"
+        break
+      fi
+      sleep 0.1
+    done
+
+    # Fallback: capture from the current default sink's monitor if stream.monitor
+    # isn't available for some reason.
+    if [[ "$have_pulse" != "1" ]]; then
+      default_sink="$(pactl get-default-sink 2>/dev/null || true)"
+      if [[ -n "$default_sink" ]]; then
+        candidate="${default_sink}.monitor"
+        if pactl list short sources 2>/dev/null | awk '{print $2}' | grep -qx "$candidate"; then
+          have_pulse=1
+          pulse_monitor_source="$candidate"
+        fi
+      fi
     fi
   fi
 fi
 
 if [[ "$have_pulse" == "1" ]]; then
-  echo "PulseAudio ready; audio will be captured from stream.monitor"
+  echo "PulseAudio ready; audio will be captured from ${pulse_monitor_source:-stream.monitor}"
 else
   echo "PulseAudio unavailable; RTMP audio will be silent"
 fi
 
 if [[ "${DEBUG_AUDIO:-0}" == "1" ]]; then
   echo "[audio] SDL_AUDIODRIVER=${SDL_AUDIODRIVER:-}"
+  echo "[audio] PULSE_SERVER=${PULSE_SERVER:-}"
+  echo "[audio] PULSE_RUNTIME_PATH=${PULSE_RUNTIME_PATH:-}"
+  if [[ -n "${PULSE_RUNTIME_PATH:-}" ]]; then
+    echo "[audio] pulse socket: ${PULSE_RUNTIME_PATH}/native ($(ls -l "${PULSE_RUNTIME_PATH}/native" 2>/dev/null || echo missing))"
+  fi
+  if command -v ps >/dev/null 2>&1; then
+    echo "[audio] pulseaudio processes:" && ps aux | grep -E '[p]ulseaudio' || true
+  fi
   if command -v pactl >/dev/null 2>&1; then
     echo "[audio] pactl info:" && pactl info || true
     echo "[audio] sinks:" && pactl list short sinks || true
     echo "[audio] sources:" && pactl list short sources || true
     echo "[audio] default sink:" && pactl get-default-sink || true
     echo "[audio] default source:" && pactl get-default-source || true
+  fi
+fi
+
+# Headless audio capture for RTMP: have the engine mix PCM into a FIFO that
+# ffmpeg can read. This avoids requiring ALSA/Pulse devices in the container.
+audio_fifo=""
+if [[ -n "${RTMP_ENDPOINT}" ]]; then
+  audio_fifo="${AUDIO_FIFO_PATH:-/tmp/dorch-audio.pcm}"
+  rm -f "$audio_fifo" 2>/dev/null || true
+  if mkfifo "$audio_fifo" 2>/dev/null; then
+    chmod 666 "$audio_fifo" 2>/dev/null || true
+    export DORCH_AUDIO_FIFO="$audio_fifo"
+    export DORCH_HEADLESS_AUDIO=1
+    echo "[audio] Using headless FIFO audio capture at $audio_fifo"
+  else
+    echo "[audio] WARNING: failed to create FIFO at $audio_fifo; RTMP audio may be silent"
+    audio_fifo=""
   fi
 fi
 
@@ -126,13 +221,29 @@ echo ">>> ${CLIENT[*]}"
 "${CLIENT[@]}" &
 game_pid=$!
 
+if [[ "$have_pulse" == "1" ]]; then
+  # Ensure any new sink-inputs (e.g. ALSA->Pulse clients) get moved into the
+  # stream sink so that stream.monitor has the game audio.
+  (
+    for _t in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+      inputs="$(pactl list short sink-inputs 2>/dev/null | awk '{print $1}' || true)"
+      for i in $inputs; do
+        pactl move-sink-input "$i" stream >/dev/null 2>&1 || true
+      done
+      sleep 0.2
+    done
+  ) &
+fi
+
 ffmpeg_pid=""
 if [[ -n "${RTMP_ENDPOINT}" ]]; then
   echo "Starting RTMP stream to endpoint (redacted)."
 
   audio_in_args=( -f lavfi -i "anullsrc=channel_layout=stereo:sample_rate=44100" )
-  if [[ "$have_pulse" == "1" ]]; then
-    audio_in_args=( -f pulse -i stream.monitor )
+  if [[ -n "${audio_fifo}" && -p "${audio_fifo}" ]]; then
+    audio_in_args=( -thread_queue_size 512 -f s16le -ar 44100 -ac 2 -i "${audio_fifo}" )
+  elif [[ "$have_pulse" == "1" ]]; then
+    audio_in_args=( -thread_queue_size 512 -f pulse -i "${pulse_monitor_source:-stream.monitor}" )
   fi
 
   ffmpeg -hide_banner -loglevel warning \
