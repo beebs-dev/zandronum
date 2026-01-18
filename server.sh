@@ -68,6 +68,8 @@ echo "IWAD SHA256: $(sha256sum "$IWAD_PATH" || true)"
 SERVER=(
   /opt/zandronum/zandronum-server
   -iwad "iwad.wad"
+  -skill ${SKILL:-3}
+  +map ${WARP:-"MAP01"}
   +sv_coop_damagefactor 1.0
   +sv_defaultdmflags 0
   +sv_maxplayers 8
