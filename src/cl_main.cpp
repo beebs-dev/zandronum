@@ -50,6 +50,11 @@
 
 #include "networkheaders.h"
 
+#ifdef DORCH_SPECTATOR
+#include <errno.h>
+#include <string.h>
+#endif
+
 // [AK] Including "networkheaders.h" in Windows also includes <wingdi.h> which
 // already defines OPAQUE. We need this constant for SVC2_FLASHSTEALTHMONSTER,
 // so we must undefine it here.
@@ -585,7 +590,32 @@ void CLIENT_Destruct( void )
 static bool g_bDorchSpectatorInitialized = false;
 static int g_iDorchSpectatorNextCycleTic = 0;
 static int g_iDorchSpectatorPendingShotTic = -1;
-static char g_szDorchSpectatorShotPath[] = "/screenshot.png";
+static char g_szDorchSpectatorShotPathFinal[] = "/screenshot.png";
+static char g_szDorchSpectatorShotPathTmp[] = "/screenshot.png.tmp";
+
+static void DORCH_WriteSpectatorScreenshot( void )
+{
+	// Write to a temp path first, then atomically move into place so external
+	// readers never observe a partially-written PNG.
+	Printf( "[dorch] writing screenshot to %s\n", g_szDorchSpectatorShotPathTmp );
+	G_ScreenShot( g_szDorchSpectatorShotPathTmp );
+
+	// POSIX rename() is atomic and replaces the destination if it exists.
+	if ( rename( g_szDorchSpectatorShotPathTmp, g_szDorchSpectatorShotPathFinal ) == -1 )
+	{
+		#ifdef _WIN32
+		// Windows rename() fails if destination exists; remove then retry.
+		remove( g_szDorchSpectatorShotPathFinal );
+		if ( rename( g_szDorchSpectatorShotPathTmp, g_szDorchSpectatorShotPathFinal ) == 0 )
+			return;
+		#endif
+
+		Printf( "[dorch] failed to move screenshot into place (%s -> %s): %s\n",
+			g_szDorchSpectatorShotPathTmp,
+			g_szDorchSpectatorShotPathFinal,
+			strerror( errno ) );
+	}
+}
 
 static void DORCH_SpectatorTick( void )
 {
@@ -627,8 +657,7 @@ static void DORCH_SpectatorTick( void )
 		if ( gametic >= g_iDorchSpectatorPendingShotTic )
 		{
 			g_iDorchSpectatorPendingShotTic = -1;
-			Printf( "[dorch] writing screenshot to %s\n", g_szDorchSpectatorShotPath );
-			G_ScreenShot( g_szDorchSpectatorShotPath );
+			DORCH_WriteSpectatorScreenshot( );
 			g_iDorchSpectatorNextCycleTic = gametic + intervalTics;
 		}
 		return;

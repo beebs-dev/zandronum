@@ -52,7 +52,7 @@ if [[ -n "${WAD_LIST:-}" ]]; then
   done
 fi
 
-rm -f /screenshot.png /screenshot.jpg /screenshot.jpg.tmp
+rm -f /screenshot.png /screenshot.png.tmp /screenshot.jpg /screenshot.jpg.tmp
 
 # Run the client in a virtual X server.
 # NOTE: Zandronum still needs an X display for rendering, even for screenshots.
