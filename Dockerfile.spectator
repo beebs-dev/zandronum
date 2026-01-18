@@ -60,8 +60,10 @@ COPY --from=build /src/build/zandronum.pk3 /opt/zandronum/zandronum.pk3
 
 COPY resolve-by-id.sh /resolve-by-id.sh
 COPY spectator.sh /spectator.sh
+COPY spectator-inner.sh /spectator-inner.sh
 RUN chmod +x /resolve-by-id.sh
 RUN chmod +x /spectator.sh
+RUN chmod +x /spectator-inner.sh
 
 VOLUME ["/var/wads"]
 
