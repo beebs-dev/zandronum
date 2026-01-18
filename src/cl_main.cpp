@@ -203,7 +203,7 @@ CVAR( Bool, cl_autoready, false, CVAR_ARCHIVE )
 // console commands from an autoexec/-exec file can occur too early (pre-auth)
 // and be rejected by the server.
 CVAR( Bool, dorch_spectator_enable, true, CVAR_GLOBALCONFIG | CVAR_ARCHIVE )
-CVAR( Int, dorch_spectator_interval_tics, 10 * TICRATE, CVAR_GLOBALCONFIG | CVAR_ARCHIVE )
+CVAR( Int, dorch_spectator_interval_tics, 30 * TICRATE, CVAR_GLOBALCONFIG | CVAR_ARCHIVE )
 CVAR( Int, dorch_spectator_shot_delay_tics, 5, CVAR_GLOBALCONFIG | CVAR_ARCHIVE )
 #endif
 
