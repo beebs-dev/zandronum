@@ -246,12 +246,25 @@ if [[ -n "${RTMP_ENDPOINT}" ]]; then
     audio_in_args=( -thread_queue_size 512 -f pulse -i "${pulse_monitor_source:-stream.monitor}" )
   fi
 
-  ffmpeg -hide_banner -loglevel warning \
-    -f x11grab -video_size 640x480 -framerate 30 -i "${DISPLAY}.0" \
-    "${audio_in_args[@]}" \
-    -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p -g 60 -keyint_min 60 \
-    -c:a aac -b:a 128k -ar 44100 \
-    -f flv "${RTMP_ENDPOINT}" &
+  (
+    while kill -0 "$game_pid" 2>/dev/null; do
+      ffmpeg -hide_banner -loglevel warning \
+        -f x11grab -video_size 640x480 -framerate 30 -i "${DISPLAY}.0" \
+        "${audio_in_args[@]}" \
+        -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p -g 60 -keyint_min 60 \
+        -c:a aac -b:a 128k -ar 44100 \
+        -f flv "${RTMP_ENDPOINT}"
+
+      rc=$?
+      # If the game is gone, don't keep reconnecting.
+      if ! kill -0 "$game_pid" 2>/dev/null; then
+        exit 0
+      fi
+
+      echo "[rtmp] ffmpeg exited (code=$rc); retrying in 1s"
+      sleep 1
+    done
+  ) &
   ffmpeg_pid=$!
 fi
 
