@@ -300,7 +300,7 @@
 
         // Download + decompress all required WADs before starting the engine.
         setHud('Downloading WADs…');
-        const wadBytesById = new Map();
+        let wadBytesById = new Map();
         const wadPathById = new Map();
         const allIds = [iwadId, ...pwadIds];
         for (const id of allIds) {
@@ -530,31 +530,14 @@
           },
           preRun: [
             function () {
-              try {
-                // Ensure a writable home + XDG-ish config base exists.
-                // Zandronum uses NicePath("~/.config/") on Unix.
-                if (typeof FS !== 'undefined' && FS.mkdir) {
-                  try { FS.mkdir('/home'); } catch (_) {}
-                  try { FS.mkdir('/home/web_user'); } catch (_) {}
-                  try { FS.mkdir('/home/web_user/.config'); } catch (_) {}
-                  try { FS.mkdir('/wads'); } catch (_) {}
-
-                  try {
-                    // Write IWAD/PWAD bytes that we downloaded + decompressed.
-                    const iwadBytes = wadBytesById.get(iwadId);
-                    if (iwadBytes) FS.writeFile(iwadPath, iwadBytes);
-                    for (let i = 0; i < pwadIds.length; i++) {
-                      const id = pwadIds[i];
-                      const p = pwadPaths[i];
-                      const b = wadBytesById.get(id);
-                      if (b) FS.writeFile(p, b);
-                    }
-                  } catch (e) {
-                    console.error('Failed to write WADs into FS:', e);
-                    throw e;
-                  }
-                }
-              } catch (_) {}
+              // Ensure a writable home + XDG-ish config base exists.
+              // Zandronum uses NicePath("~/.config/") on Unix.
+              if (typeof FS !== 'undefined' && FS.mkdir) {
+                try { FS.mkdir('/home'); } catch (_) {}
+                try { FS.mkdir('/home/web_user'); } catch (_) {}
+                try { FS.mkdir('/home/web_user/.config'); } catch (_) {}
+                // NOTE: WAD/PK3 files are written after module creation via zand.FS.
+              }
             },
           ],
           print: (t) => {
@@ -571,6 +554,47 @@
 
         // Give input handlers access to the module instance (for resuming SDL audio).
         currentModule = zand;
+
+        // Write downloaded IWAD/PWAD bytes into the Emscripten FS.
+        // Doing this here (instead of preRun) avoids relying on a global FS binding.
+        try {
+          if (!zand.FS || !zand.FS.writeFile) {
+            throw new Error('Emscripten FS not available on module');
+          }
+          try { zand.FS.mkdir('/wads'); } catch (_) {}
+
+          const iwadBytes = wadBytesById.get(iwadId);
+          if (!iwadBytes || !iwadBytes.length) {
+            throw new Error('missing IWAD bytes');
+          }
+          zand.FS.writeFile(iwadPath, iwadBytes);
+
+          for (let i = 0; i < pwadIds.length; i++) {
+            const id = pwadIds[i];
+            const p = pwadPaths[i];
+            const b = wadBytesById.get(id);
+            if (!b || !b.length) {
+              throw new Error(`missing PWAD bytes for wad_id=${id}`);
+            }
+            zand.FS.writeFile(p, b);
+          }
+          wadBytesById = undefined; // free memory
+
+          if (debugEnabled) {
+            const list = [];
+            try {
+              for (const name of zand.FS.readdir('/wads')) {
+                if (name === '.' || name === '..') continue;
+                list.push(name);
+              }
+            } catch (_) {}
+            console.log('debug: wrote IWAD bytes=', iwadBytes.length, 'path=', iwadPath);
+            console.log('debug: /wads contains:', list);
+          }
+        } catch (e) {
+          console.error('Failed to write downloaded WADs into FS:', e);
+          throw e;
+        }
 
         if (debugEnabled) {
           try {
@@ -597,6 +621,7 @@
 
         // Kick off the engine in client mode. The IP is a dummy; UDP is bridged over WebRTC.
         // Use the downloaded IWAD/PWADs we wrote into the Emscripten FS.
+        console.log('pwadPaths:', pwadPaths);
         try {
           const args = [];
           args.push('-iwad', iwadPath);

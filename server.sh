@@ -80,13 +80,12 @@ if [[ -n "${WAD_LIST:-}" ]]; then
     wad="${wad#"${wad%%[![:space:]]*}"}"  # ltrim
     wad="${wad%"${wad##*[![:space:]]}"}"  # rtrim
     [[ -z "$wad" ]] && continue
-
     wad_path="$(resolve_by_id "$wad")"
     if [[ ! -f "$wad_path" ]]; then
       echo "ERROR: PWAD not found after resolve: $wad_path"
       exit 1
     fi
-
+    echo "Adding PWAD: $wad_path"
     SERVER+=( -file "$wad_path" )
   done
 fi
