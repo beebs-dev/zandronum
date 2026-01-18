@@ -494,13 +494,31 @@ void MessagePump (const SDL_Event &sev)
 				}
 				break;
 			}
-			event.data2 = sev.key.keysym.unicode & 0xff;
-			if (event.data1 < 128)
+			// SDL 1.2's keysym.unicode is only valid for translated text input.
+			// Some backends can report garbage for modifier-only keys.
+			// Never treat modifier keys as text input.
+			const bool isModifierKey =
+				sev.key.keysym.sym == SDLK_LSHIFT || sev.key.keysym.sym == SDLK_RSHIFT ||
+				sev.key.keysym.sym == SDLK_LCTRL  || sev.key.keysym.sym == SDLK_RCTRL  ||
+				sev.key.keysym.sym == SDLK_LALT   || sev.key.keysym.sym == SDLK_RALT   ||
+				sev.key.keysym.sym == SDLK_LMETA  || sev.key.keysym.sym == SDLK_RMETA  ||
+				sev.key.keysym.sym == SDLK_LSUPER || sev.key.keysym.sym == SDLK_RSUPER;
+
+			Uint16 unicode = sev.key.keysym.unicode;
+			event.data2 = (!isModifierKey && unicode < 256) ? (unicode & 0xff) : 0;
+
+			// Only forward a GUI KeyDown/Up when we have a meaningful key code.
+			// Modifiers are represented via event.data3.
+			if (event.data1 != 0)
 			{
-				event.data1 = toupper(event.data1);
+				if (event.data1 < 128)
+				{
+					event.data1 = toupper(event.data1);
+				}
 				D_PostEvent (&event);
 			}
-			if (!iscntrl(event.data2) && event.subtype != EV_GUI_KeyUp)
+
+			if (!isModifierKey && event.data2 != 0 && !iscntrl(event.data2) && event.subtype != EV_GUI_KeyUp)
 			{
 				event.subtype = EV_GUI_Char;
 				event.data1 = event.data2;
