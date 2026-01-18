@@ -1038,6 +1038,7 @@ void SERVER_Construct( void )
 
 		// This is currently an open slot.
 		g_aClients[ulIdx].State = CLS_FREE;
+		g_aClients[ulIdx].bInvisibleSpectator = false;
 	}
 
 	// If they used "-host <#>", make <#> the max number of players.
@@ -1601,7 +1602,14 @@ ULONG SERVER_CountPlayers( bool bCountBots )
 
 	for ( ULONG ulIdx = 0; ulIdx < MAXPLAYERS; ulIdx++ )
 	{
-		if ( playeringame[ulIdx] && ( !players[ulIdx].bIsBot || ( players[ulIdx].bIsBot && bCountBots )))
+		if ( playeringame[ulIdx] == false )
+			continue;
+
+		// [dorch] The special invisible spectator should not count as a player.
+		if ( g_aClients[ulIdx].bInvisibleSpectator )
+			continue;
+
+		if ( !players[ulIdx].bIsBot || ( players[ulIdx].bIsBot && bCountBots ))
 			ulNumPlayers++;
 	}
 
@@ -2441,6 +2449,8 @@ void SERVER_SetupNewConnection( BYTESTREAM_s *pByteStream, bool bNewPlayer )
 	FString			clientPassword;
 	char			szServerPassword[MAX_NETWORK_STRING];
 	int				clientNetworkGameVersion;
+	int				connectFlags = 0;
+	bool				bReadConnectDataEarly = false;
 	IPStringArray	szAddress;
 	ULONG			ulIdx;
 	NETADDRESS_s	AddressFrom;
@@ -2483,12 +2493,12 @@ void SERVER_SetupNewConnection( BYTESTREAM_s *pByteStream, bool bNewPlayer )
 		lClient = SERVER_FindFreeClientSlot( );
 
 		// If the server is full, send him a packet saying that it is.
-		if (( lClient == -1 ) || ( SERVER_CountPlayers( true ) >= static_cast<unsigned> (sv_maxclients) && !bAdminClientConnecting ))
+		if ( lClient == -1 )
 		{
 			// Tell the client a packet saying the server is full.
 			SERVER_ConnectionError( AddressFrom, "Server is full.", NETWORK_ERRORCODE_SERVERISFULL );
 
-			// User sent the version, password, start as spectator, restore frags, and network protcol version along with the challenge.
+			// User sent the version, password, connect flags, hide account, network protocol version and lump authentication string.
 			pByteStream->ReadString();
 			pByteStream->ReadString();
 			pByteStream->ReadByte();
@@ -2498,6 +2508,35 @@ void SERVER_SetupNewConnection( BYTESTREAM_s *pByteStream, bool bNewPlayer )
 			pByteStream->ReadString();
 			return;
 		}
+
+		// If we're at capacity (sv_maxclients), allow admins and the special invisible spectator.
+		if ( SERVER_CountPlayers( true ) >= static_cast<unsigned> (sv_maxclients) && !bAdminClientConnecting )
+		{
+			// Read connection data now so we can check for CCF_INVISIBLESPECTATOR.
+			clientVersion = pByteStream->ReadString();
+			V_CleanPlayerName ( clientVersion, false );
+			clientVersion = clientVersion.Left ( 32 );
+
+			clientPassword = pByteStream->ReadString();
+			clientPassword.ToUpper();
+
+			connectFlags = pByteStream->ReadByte();
+			g_aClients[lClient].WantHideAccount = !!pByteStream->ReadByte();
+			clientNetworkGameVersion = pByteStream->ReadByte();
+
+			const bool bWantsInvisibleSpectator =
+				( ( connectFlags & CCF_STARTASSPECTATOR ) != 0 ) &&
+				( ( connectFlags & CCF_INVISIBLESPECTATOR ) != 0 );
+
+			if ( bWantsInvisibleSpectator == false )
+			{
+				SERVER_ConnectionError( AddressFrom, "Server is full.", NETWORK_ERRORCODE_SERVERISFULL );
+				return;
+			}
+
+			// Continue with the connection using the values we already read.
+			bReadConnectDataEarly = true;
+		}
 	}
 	else
 		lClient = g_lCurrentClient;
@@ -2505,22 +2544,31 @@ void SERVER_SetupNewConnection( BYTESTREAM_s *pByteStream, bool bNewPlayer )
 	if ( g_aClients[lClient].State >= CLS_SPAWNED_BUT_NEEDS_AUTHENTICATION )
 		SERVER_DisconnectClient( lClient, false, true, LEAVEREASON_RECONNECT );
 
-	// Read in the client version info.
-	clientVersion = pByteStream->ReadString();
-	// [BB] Hijack the player name cleaning system to get rid of inappropriate chars in the version string.
-	// Tampered clients can put in anything here!
-	// [AK] V_CleanPlayerName also truncates the string if it's longer than MAXPLAYERNAMEBUFFER, but under
-	// normal circumstances, the version string should never be this long anyways.
-	V_CleanPlayerName ( clientVersion, false );
-	// [BB] Version strings also will never be incredibly long.
-	clientVersion = clientVersion.Left ( 32 );
+	if ( bReadConnectDataEarly == false )
+	{
+		// Read in the client version info.
+		clientVersion = pByteStream->ReadString();
+		// [BB] Hijack the player name cleaning system to get rid of inappropriate chars in the version string.
+		// Tampered clients can put in anything here!
+		// [AK] V_CleanPlayerName also truncates the string if it's longer than MAXPLAYERNAMEBUFFER, but under
+		// normal circumstances, the version string should never be this long anyways.
+		V_CleanPlayerName ( clientVersion, false );
+		// [BB] Version strings also will never be incredibly long.
+		clientVersion = clientVersion.Left ( 32 );
 
-	// Read in the client's password.
-	clientPassword = pByteStream->ReadString();
-	clientPassword.ToUpper();
+		// Read in the client's password.
+		clientPassword = pByteStream->ReadString();
+		clientPassword.ToUpper();
 
-	// [BB] Read in the client connection flags.
-	const int connectFlags = pByteStream->ReadByte();
+		// Read in the client connection flags.
+		connectFlags = pByteStream->ReadByte();
+
+		// [TP] Save whether or not the player wants to hide his account.
+		g_aClients[lClient].WantHideAccount = !!pByteStream->ReadByte();
+
+		// Read in the client's network game version.
+		clientNetworkGameVersion = pByteStream->ReadByte();
+	}
 
 	// Read in whether or not the client wants to start as a spectator.
 	g_aClients[lClient].bWantStartAsSpectator = !!( connectFlags & CCF_STARTASSPECTATOR );
@@ -2531,11 +2579,10 @@ void SERVER_SetupNewConnection( BYTESTREAM_s *pByteStream, bool bNewPlayer )
 	// [BB] Save whether the clients wants his country to be hidden.
 	g_aClients[lClient].bWantHideCountry = !!( connectFlags & CCF_HIDECOUNTRY );
 
-	// [TP] Save whether or not the player wants to hide his account.
-	g_aClients[lClient].WantHideAccount = !!pByteStream->ReadByte();
-
-	// Read in the client's network game version.
-	clientNetworkGameVersion = pByteStream->ReadByte();
+	// [dorch] Only honor invisible spectator if the client is starting as spectator.
+	g_aClients[lClient].bInvisibleSpectator =
+		( g_aClients[lClient].bWantStartAsSpectator ) &&
+		( ( connectFlags & CCF_INVISIBLESPECTATOR ) != 0 );
 
 	g_aClients[lClient].SavedPackets.Clear();
 	g_aClients[lClient].PacketBuffer.Clear();
@@ -3751,6 +3798,7 @@ void SERVER_DisconnectClient( ULONG ulClient, bool bBroadcast, bool bSaveInfo, L
 	g_aClients[ulClient].Address.Clear( );
 	g_aClients[ulClient].State = CLS_FREE;
 	g_aClients[ulClient].ulLastGameTic = 0;
+	g_aClients[ulClient].bInvisibleSpectator = false;
 	playeringame[ulClient] = false;
 
 	// Run the disconnect scripts now that the player is leaving.
@@ -6843,6 +6891,10 @@ static bool server_RequestJoin( BYTESTREAM_s *pByteStream )
 
 	// Player can't rejoin game if he's not spectating!
 	if (( playeringame[g_lCurrentClient] == false ) || ( players[g_lCurrentClient].bSpectating == false ))
+		return ( false );
+
+	// [dorch] The special invisible spectator connection must stay spectating.
+	if ( SERVER_GetClient( g_lCurrentClient ) && SERVER_GetClient( g_lCurrentClient )->bInvisibleSpectator )
 		return ( false );
 
 	// Player can't rejoin their LMS/survival game if they are dead.

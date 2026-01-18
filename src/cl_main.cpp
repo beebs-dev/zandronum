@@ -9943,9 +9943,14 @@ CVAR( Flag, cl_hidecountry, cl_connect_flags, CCF_HIDECOUNTRY )
 // [BC] TEMPORARY
 ADD_STAT( momentum )
 {
-	FString	Out;
+		( cl_hidecountry ? CCF_HIDECOUNTRY : 0 ) |
+		( cl_invisiblespectator ? CCF_INVISIBLESPECTATOR : 0 )
 
 	Out.Format( "X: %3d     Y: %3d", players[consoleplayer].velx, players[consoleplayer].vely );
+
+// [dorch] Marks this connection as an invisible spectator (server can exclude from counts/reporting).
+// Note: the server will only honor this when also starting as spectator.
+CVAR( Flag, cl_invisiblespectator, cl_connect_flags, CCF_INVISIBLESPECTATOR )
 
 	return ( Out );
 }

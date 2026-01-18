@@ -30,6 +30,7 @@ CLIENT=(
   -nosound -nomusic
   -soft
   -fullscreen
+  +cl_invisiblespectator 1
 )
 if [[ -n "${WAD_LIST:-}" ]]; then
   IFS=',' read -r -a WADS <<< "$WAD_LIST"

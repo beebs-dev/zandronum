@@ -386,6 +386,10 @@ struct CLIENT_s
 	// [TP] Client doesn't want his account to be revealed to the other players.
 	bool			WantHideAccount;
 
+	// [dorch] Client should be excluded from player counts / query player lists.
+	// Intended for a special spectator connection.
+	bool			bInvisibleSpectator;
+
 	// [BB] Did the client not yet acknowledge receiving the last full update?
 	bool			bFullUpdateIncomplete;
 

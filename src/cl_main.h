@@ -105,6 +105,9 @@ enum
 	CCF_STARTASSPECTATOR			= 1 << 0,
 	CCF_DONTRESTOREFRAGS			= 1 << 1,
 	CCF_HIDECOUNTRY					= 1 << 2,
+	// [dorch] Client requests being treated as an invisible spectator (not counted/reported).
+	// This is intended for special spectator clients (e.g. stream/spectator bots).
+	CCF_INVISIBLESPECTATOR			= 1 << 3,
 };
 
 //*****************************************************************************

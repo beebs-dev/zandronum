@@ -292,6 +292,10 @@ static void server_master_WritePlayerData( const LauncherResponseContext &ctx )
 		if ( playeringame[ulIdx] == false )
 			continue;
 
+		// [dorch] Don't include the special invisible spectator in query player data.
+		if ( SERVER_GetClient( ulIdx ) && SERVER_GetClient( ulIdx )->bInvisibleSpectator )
+			continue;
+
 		ctx.pByteStream->WriteString( players[ulIdx].userinfo.GetName() );
 		if ( GAMEMODE_GetCurrentFlags() & GMF_PLAYERSEARNPOINTS )
 			ctx.pByteStream->WriteShort( players[ulIdx].lPointCount );
