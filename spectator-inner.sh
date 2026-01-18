@@ -6,6 +6,7 @@ WAD_LIST=${WAD_LIST:-""}
 STARTUP_DELAY_SECONDS=${STARTUP_DELAY_SECONDS:-10}
 GAME_ID=${GAME_ID:-unset}
 MASTER_BASE_URL=${MASTER_BASE_URL:-http://dorch-master}
+RTMP_ENDPOINT=${RTMP_ENDPOINT:-""}
 
 resolve_by_id() {
   /resolve-by-id.sh $DATA_ROOT "$1"
@@ -21,12 +22,51 @@ while [[ ! -f "$IWAD_PATH" ]]; do
 done
 echo "Spectator starting, connecting to $SERVER_ADDR using IWAD $IWAD_PATH"
 
+# Start a local PulseAudio daemon so we can capture game audio from a monitor
+# source (stream.monitor) and push it out via ffmpeg.
+have_pulse=0
+if command -v pulseaudio >/dev/null 2>&1 && command -v pactl >/dev/null 2>&1; then
+  export SDL_AUDIODRIVER=${SDL_AUDIODRIVER:-pulse}
+
+  # Try system-mode first (works well in containers), then fall back.
+  pulseaudio --system --daemonize=yes --exit-idle-time=-1 --disallow-exit --log-target=stderr 2>/dev/null || \
+  pulseaudio --daemonize=yes --exit-idle-time=-1 --disallow-exit --log-target=stderr 2>/dev/null || true
+
+  # Give PulseAudio a moment to create its socket.
+  sleep 0.2
+
+  if pactl info >/dev/null 2>&1; then
+    pactl load-module module-null-sink sink_name=stream sink_properties=device.description=stream >/dev/null 2>&1 || true
+    pactl set-default-sink stream >/dev/null 2>&1 || true
+
+    if pactl list short sources 2>/dev/null | awk '{print $2}' | grep -qx 'stream.monitor'; then
+      have_pulse=1
+    fi
+  fi
+fi
+
+if [[ "$have_pulse" == "1" ]]; then
+  echo "PulseAudio ready; audio will be captured from stream.monitor"
+else
+  echo "PulseAudio unavailable; RTMP audio will be silent"
+fi
+
+if [[ "${DEBUG_AUDIO:-0}" == "1" ]]; then
+  echo "[audio] SDL_AUDIODRIVER=${SDL_AUDIODRIVER:-}"
+  if command -v pactl >/dev/null 2>&1; then
+    echo "[audio] pactl info:" && pactl info || true
+    echo "[audio] sinks:" && pactl list short sinks || true
+    echo "[audio] sources:" && pactl list short sources || true
+    echo "[audio] default sink:" && pactl get-default-sink || true
+    echo "[audio] default source:" && pactl get-default-source || true
+  fi
+fi
+
 CLIENT=(
   /opt/zandronum/zandronum
   -iwad "$IWAD_PATH"
   -connect "$SERVER_ADDR"
   -width 640 -height 480
-  -nosound -nomusic
   -soft
   -fullscreen
   +cl_invisiblespectator 1
@@ -56,14 +96,46 @@ rm -f /screenshot.png /screenshot.png.tmp /screenshot.webp /screenshot.webp.tmp
 
 # Run the client in a virtual X server.
 # NOTE: Zandronum still needs an X display for rendering, even for screenshots.
-echo ">>> ${CLIENT[*]}"
-xvfb-run -a -s "-screen 0 640x480x24" "${CLIENT[@]}" &
+DISPLAY_NUMBER=${DISPLAY_NUMBER:-99}
+export DISPLAY=":${DISPLAY_NUMBER}"
 
+Xvfb "$DISPLAY" -screen 0 640x480x24 -nolisten tcp -ac &
+xvfb_pid=$!
+sleep 0.2
+
+echo ">>> ${CLIENT[*]}"
+"${CLIENT[@]}" &
 game_pid=$!
+
+ffmpeg_pid=""
+if [[ -n "${RTMP_ENDPOINT}" ]]; then
+  echo "Starting RTMP stream to endpoint (redacted)."
+
+  audio_in_args=( -f lavfi -i "anullsrc=channel_layout=stereo:sample_rate=44100" )
+  if [[ "$have_pulse" == "1" ]]; then
+    audio_in_args=( -f pulse -i stream.monitor )
+  fi
+
+  ffmpeg -hide_banner -loglevel warning \
+    -f x11grab -video_size 640x480 -framerate 30 -i "${DISPLAY}.0" \
+    "${audio_in_args[@]}" \
+    -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p -g 60 -keyint_min 60 \
+    -c:a aac -b:a 128k -ar 44100 \
+    -f flv "${RTMP_ENDPOINT}" &
+  ffmpeg_pid=$!
+fi
 
 term() {
   echo "Got SIGTERM, forwarding to client pid=$game_pid"
   kill -TERM "$game_pid" 2>/dev/null || true
+  if [[ -n "${ffmpeg_pid}" ]] && kill -0 "$ffmpeg_pid" 2>/dev/null; then
+    echo "Stopping ffmpeg pid=$ffmpeg_pid"
+    kill -TERM "$ffmpeg_pid" 2>/dev/null || true
+  fi
+  if [[ -n "${xvfb_pid:-}" ]] && kill -0 "$xvfb_pid" 2>/dev/null; then
+    echo "Stopping Xvfb pid=$xvfb_pid"
+    kill -TERM "$xvfb_pid" 2>/dev/null || true
+  fi
 }
 trap term TERM INT
 
@@ -225,3 +297,10 @@ while kill -0 "$game_pid" 2>/dev/null; do
 done
 
 wait "$game_pid"
+
+if [[ -n "${ffmpeg_pid}" ]] && kill -0 "$ffmpeg_pid" 2>/dev/null; then
+  kill -TERM "$ffmpeg_pid" 2>/dev/null || true
+fi
+if [[ -n "${xvfb_pid:-}" ]] && kill -0 "$xvfb_pid" 2>/dev/null; then
+  kill -TERM "$xvfb_pid" 2>/dev/null || true
+fi

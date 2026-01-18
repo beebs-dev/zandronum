@@ -25,7 +25,8 @@ COPY . .
 
 RUN cmake -S . -B build -G Ninja \
 	-DCMAKE_BUILD_TYPE=Release \
-	-DNO_SOUND=ON \
+	-DNO_FMOD=ON \
+	-DNO_VOIP=ON \
 	-DNO_GL=ON \
 	-DNO_GTK=ON \
 	-DNO_LIBSECRET=ON \
@@ -42,10 +43,16 @@ RUN apt-get update \
 	&& apt-get install -y --no-install-recommends \
 		ca-certificates \
 		curl \
+		ffmpeg \
 		libbz2-1.0 \
 		libcurl4 \
 		libjpeg62-turbo \
 		libsdl1.2debian \
+		libasound2 \
+		libasound2-plugins \
+		libpulse0 \
+		pulseaudio \
+		pulseaudio-utils \
 		libssl3 \
 		zlib1g \
 		xvfb \
