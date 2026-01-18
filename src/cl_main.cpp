@@ -9937,6 +9937,10 @@ CVAR( Flag, cl_startasspectator, cl_connect_flags, CCF_STARTASSPECTATOR );
 CVAR( Flag, cl_dontrestorefrags, cl_connect_flags, CCF_DONTRESTOREFRAGS )
 CVAR( Flag, cl_hidecountry, cl_connect_flags, CCF_HIDECOUNTRY )
 
+// [dorch] Marks this connection as an invisible spectator (server can exclude from counts/reporting).
+// Note: the server will only honor this when also starting as spectator.
+CVAR( Flag, cl_invisiblespectator, cl_connect_flags, CCF_INVISIBLESPECTATOR )
+
 //*****************************************************************************
 //	STATISTICS
 /*
@@ -9947,11 +9951,6 @@ ADD_STAT( momentum )
 		( cl_invisiblespectator ? CCF_INVISIBLESPECTATOR : 0 )
 
 	Out.Format( "X: %3d     Y: %3d", players[consoleplayer].velx, players[consoleplayer].vely );
-
-// [dorch] Marks this connection as an invisible spectator (server can exclude from counts/reporting).
-// Note: the server will only honor this when also starting as spectator.
-CVAR( Flag, cl_invisiblespectator, cl_connect_flags, CCF_INVISIBLESPECTATOR )
-
 	return ( Out );
 }
 */
