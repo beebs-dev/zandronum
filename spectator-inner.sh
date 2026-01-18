@@ -263,10 +263,11 @@ if [[ -n "${RTMP_ENDPOINT}" ]]; then
         -f x11grab -video_size ${VIDEO_WIDTH}x${VIDEO_HEIGHT} -framerate ${VIDEO_FPS} -i "${DISPLAY}.0" \
         "${audio_in_args[@]}" \
         -c:v libx264 -preset ${X264_PRESET} -pix_fmt yuv420p \
-        -g ${VIDEO_GOP} -keyint_min ${VIDEO_GOP} \
+        -profile:v baseline -level 3.0 \
+        -g ${VIDEO_GOP} -keyint_min ${VIDEO_GOP} -sc_threshold 0 \
+        -force_key_frames "expr:gte(t,n_forced*${VIDEO_GOP_SECONDS})" \
         -b:v ${VIDEO_BITRATE} -maxrate ${VIDEO_BITRATE} -bufsize ${VIDEO_BUFSIZE} \
-        -x264-params "nal-hrd=cbr:force-cfr=1:scenecut=0:open_gop=0" \
-        -fps_mode cfr \
+        -r ${VIDEO_FPS} -vsync cfr \
         -c:a aac -b:a 128k -ar 44100 \
         -f flv "${RTMP_ENDPOINT}"
 
