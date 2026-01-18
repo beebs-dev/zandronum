@@ -1,43 +1,19 @@
 #!/bin/bash
 set -euo pipefail
-
+RESOLVE_SCRIPT_PATH=$(dirname "$0")/resolve-by-id.sh
 echo "Game ID: ${GAME_ID:-unset}"
 echo "Using IWAD_ID: $IWAD_ID"
 echo "Warp Level: ${WARP:-unset}"
 echo "Using Game Skill: ${SKILL:-unset}"
 echo "Using Data Root: ${DATA_ROOT:-unset}"
 
+MAX_PLAYERS=${MAX_PLAYERS:-32}
+echo "Using Max Players: $MAX_PLAYERS"
+
 cd "$DATA_ROOT"
 
 resolve_by_id() {
-  local id="$1"
-
-  # 1) Old behavior: file named exactly the ID
-  if [[ -f "$id" ]]; then
-    printf '%s\n' "$id"
-    return 0
-  fi
-
-  # 2) New behavior: ID.<ext> (preserve extension)
-  local matches=()
-  # Null-delimited to be safe with odd filenames; IDs won't have spaces, but extensions might.
-  while IFS= read -r -d '' f; do
-    matches+=("$f")
-  done < <(find . -maxdepth 1 -type f -name "${id}.*" -print0)
-
-  if (( ${#matches[@]} == 0 )); then
-    echo "ERROR: Could not resolve file for id=$id in $DATA_ROOT (looked for '$id' or '${id}.*')" >&2
-    ls -al "$DATA_ROOT" >&2 || true
-    return 1
-  fi
-  if (( ${#matches[@]} > 1 )); then
-    echo "ERROR: Ambiguous files for id=$id (more than one match):" >&2
-    printf '  %s\n' "${matches[@]}" >&2
-    return 1
-  fi
-
-  # strip leading ./ from find output
-  printf '%s\n' "${matches[0]#./}"
+  "$RESOLVE_SCRIPT_PATH" $DATA_ROOT "$1"
 }
 
 if [[ -z "${IWAD_ID:-}" ]]; then
@@ -74,6 +50,10 @@ SERVER=(
   +sv_defaultdmflags 0
   +sv_maxplayers 8
   +sv_pure false
+  +sv_maxclientsperip 0
+  +sv_maxclienttries 9999
+  +sv_rejectmessagekicktime 0
+  +sv_maxplayers $MAX_PLAYERS
 )
 
 if [[ -n "${WAD_LIST:-}" ]]; then

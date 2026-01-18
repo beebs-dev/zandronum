@@ -1,0 +1,66 @@
+FROM debian:bookworm AS build
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends \
+		build-essential \
+		ca-certificates \
+		cmake \
+		git \
+		libbz2-dev \
+		libcurl4-openssl-dev \
+		libjpeg-dev \
+		libsdl1.2-dev \
+		libssl-dev \
+		nasm \
+		ninja-build \
+		pkg-config \
+		python3 \
+		zlib1g-dev \
+	&& rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY . .
+
+RUN cmake -S . -B build -G Ninja \
+	-DCMAKE_BUILD_TYPE=Release \
+	-DNO_SOUND=ON \
+	-DNO_GL=ON \
+	-DNO_GTK=ON \
+	-DNO_LIBSECRET=ON
+
+RUN cmake --build build --target pk3 zdoom -j"$(nproc)"
+
+
+FROM debian:bookworm-slim AS runtime
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends \
+		ca-certificates \
+		libbz2-1.0 \
+		libcurl4 \
+		libjpeg62-turbo \
+		libsdl1.2debian \
+		libssl3 \
+		zlib1g \
+		xvfb \
+		xauth \
+		imagemagick \
+	&& rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/zandronum
+
+COPY --from=build /src/build/zandronum /opt/zandronum/zandronum
+COPY --from=build /src/build/zandronum.pk3 /opt/zandronum/zandronum.pk3
+
+COPY resolve-by-id.sh /resolve-by-id.sh
+COPY spectator.sh /spectator.sh
+RUN chmod +x /resolve-by-id.sh
+RUN chmod +x /spectator.sh
+
+VOLUME ["/var/wads"]
+
+CMD ["/spectator.sh"]

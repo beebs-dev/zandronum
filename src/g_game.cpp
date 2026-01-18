@@ -1241,6 +1241,66 @@ CCMD (spyprev)
 	ChangeSpy (SPY_PREV);
 }
 
+static int g_LastSpyRandomPlayer = -1;
+
+// [dorch] Pick a random non-spectating player to spy on.
+// Prefers a different player than the one chosen last time, if possible.
+CCMD (spyrandom)
+{
+	// [BB] The server can't use this.
+	if ( NETWORK_GetState( ) == NETSTATE_SERVER )
+	{
+		Printf ( "CCMD spyrandom can't be used on the server\n" );
+		return;
+	}
+
+	TArray<int> candidates;
+	candidates.Reserve( MAXPLAYERS );
+
+	for ( int i = 0; i < MAXPLAYERS; ++i )
+	{
+		if ( playeringame[i] == false )
+			continue;
+
+		// Only spy on actual players (ignore true spectators).
+		if ( PLAYER_IsTrueSpectator( &players[i] ) )
+			continue;
+
+		// A valid actor is required for a meaningful view.
+		if ( players[i].mo == NULL )
+			continue;
+
+		candidates.Push( i );
+	}
+
+	// No players: return to our own spectator view.
+	if ( candidates.Size( ) == 0 )
+	{
+		g_LastSpyRandomPlayer = -1;
+		ChangeSpy (SPY_CANCEL);
+		return;
+	}
+
+	// Prefer switching away from the last chosen player when possible.
+	if ( candidates.Size( ) > 1 )
+	{
+		for ( unsigned int idx = 0; idx < candidates.Size( ); ++idx )
+		{
+			if ( candidates[idx] == g_LastSpyRandomPlayer )
+			{
+				candidates.Delete( idx );
+				break;
+			}
+		}
+	}
+
+	const int chosen = candidates[ M_Random( ) % candidates.Size( ) ];
+	g_LastSpyRandomPlayer = chosen;
+
+	// allow spy mode changes even during the demo
+	ChangeSpy ( chosen != consoleplayer ? chosen : static_cast<int>( SPY_CANCEL ) );
+}
+
 CCMD (spycancel)
 {
 	// allow spy mode changes even during the demo

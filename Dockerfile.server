@@ -57,6 +57,8 @@ RUN mkdir -p /var/wads
 VOLUME ["/var/wads"]
 
 EXPOSE 10666/udp
+COPY resolve-by-id.sh /resolve-by-id.sh
 COPY server.sh /server.sh
+RUN chmod +x /resolve-by-id.sh
 RUN chmod +x /server.sh
 CMD ["/opt/zandronum/zandronum-server", "-iwad", "/var/wads"]
