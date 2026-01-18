@@ -185,6 +185,18 @@ CVAR( Bool, cl_keepserversettings, false, CVAR_ARCHIVE | CVAR_DEBUGONLY )
 // [JS] Always makes us ready when we are in intermission.
 CVAR( Bool, cl_autoready, false, CVAR_ARCHIVE )
 
+#ifdef DORCH_SPECTATOR
+// When enabled, the client will automatically spectate after connecting and
+// periodically write a screenshot to a fixed path (/screenshot.png).
+//
+// This is intended for headless/containerized spectator builds where sending
+// console commands from an autoexec/-exec file can occur too early (pre-auth)
+// and be rejected by the server.
+CVAR( Bool, dorch_spectator_enable, true, CVAR_GLOBALCONFIG | CVAR_ARCHIVE )
+CVAR( Int, dorch_spectator_interval_tics, 10 * TICRATE, CVAR_GLOBALCONFIG | CVAR_ARCHIVE )
+CVAR( Int, dorch_spectator_shot_delay_tics, 5, CVAR_GLOBALCONFIG | CVAR_ARCHIVE )
+#endif
+
 #ifdef ENABLE_AUTH_STORAGE
 // [AK] Automatically logs us into our default account (i.e. login_default_user).
 CUSTOM_CVAR( Bool, cl_autologin, false, CVAR_ARCHIVE | CVAR_NOINITCALL )
@@ -564,6 +576,64 @@ void CLIENT_Destruct( void )
 	g_LocalBuffer.Free();
 }
 
+#ifdef DORCH_SPECTATOR
+static bool g_bDorchSpectatorInitialized = false;
+static int g_iDorchSpectatorNextCycleTic = 0;
+static int g_iDorchSpectatorPendingShotTic = -1;
+static char g_szDorchSpectatorShotPath[] = "/screenshot.png";
+
+static void DORCH_SpectatorTick( void )
+{
+	if ( dorch_spectator_enable == false )
+		return;
+
+	if ( NETWORK_GetState( ) != NETSTATE_CLIENT )
+		return;
+
+	if ( CLIENT_GetConnectionState( ) != CTS_ACTIVE )
+		return;
+
+	if ( viewactive == false )
+		return;
+
+	if ( g_bDorchSpectatorInitialized == false )
+	{
+		g_bDorchSpectatorInitialized = true;
+		g_iDorchSpectatorNextCycleTic = gametic + TICRATE;
+		g_iDorchSpectatorPendingShotTic = -1;
+
+		Printf( "[dorch] spectator mode enabled; requesting spectate...\n" );
+		CLIENTCOMMANDS_Spectate( );
+		return;
+	}
+
+	// Clamp CVARs to reasonable values so we can't accidentally hammer the engine.
+	const int intervalTics = ( dorch_spectator_interval_tics < 1 ) ? 1 : dorch_spectator_interval_tics;
+	const int shotDelayTics = ( dorch_spectator_shot_delay_tics < 0 ) ? 0 : dorch_spectator_shot_delay_tics;
+
+	if ( g_iDorchSpectatorPendingShotTic >= 0 )
+	{
+		if ( gametic >= g_iDorchSpectatorPendingShotTic )
+		{
+			g_iDorchSpectatorPendingShotTic = -1;
+			Printf( "[dorch] writing screenshot to %s\n", g_szDorchSpectatorShotPath );
+			G_ScreenShot( g_szDorchSpectatorShotPath );
+			g_iDorchSpectatorNextCycleTic = gametic + intervalTics;
+		}
+		return;
+	}
+
+	if ( gametic >= g_iDorchSpectatorNextCycleTic )
+	{
+		// Choose a player to spy on (safe now that we're authenticated/active).
+		C_DoCommand( "spyrandom" );
+
+		// Delay a few tics so the view/player change has time to take effect.
+		g_iDorchSpectatorPendingShotTic = gametic + shotDelayTics;
+	}
+}
+#endif
+
 //*****************************************************************************
 //
 void CLIENT_Tick( void )
@@ -617,6 +687,10 @@ void CLIENT_Tick( void )
 
 		break;
 	}
+
+#ifdef DORCH_SPECTATOR
+	DORCH_SpectatorTick( );
+#endif
 }
 
 //*****************************************************************************

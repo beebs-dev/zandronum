@@ -28,7 +28,8 @@ RUN cmake -S . -B build -G Ninja \
 	-DNO_SOUND=ON \
 	-DNO_GL=ON \
 	-DNO_GTK=ON \
-	-DNO_LIBSECRET=ON
+	-DNO_LIBSECRET=ON \
+	-DDORCH_SPECTATOR=ON
 
 RUN cmake --build build --target pk3 zdoom -j"$(nproc)"
 

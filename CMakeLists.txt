@@ -7,6 +7,13 @@ project(Zandronum)
 # configuring/depending on the full engine.
 option( BUILD_TOOLS_ONLY "Only build host tools (for cross compiling)." OFF )
 
+# Build-time mode for Dorchester spectator containers.
+option( DORCH_SPECTATOR "Enable built-in spectator screenshot loop." OFF )
+
+if( DORCH_SPECTATOR )
+	add_definitions( -DDORCH_SPECTATOR )
+endif( DORCH_SPECTATOR )
+
 if( COMMAND cmake_policy )
 	cmake_policy( SET CMP0011 NEW )
 	cmake_policy( SET CMP0054 NEW )
