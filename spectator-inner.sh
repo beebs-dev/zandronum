@@ -7,9 +7,8 @@ STARTUP_DELAY_SECONDS=${STARTUP_DELAY_SECONDS:-10}
 GAME_ID=${GAME_ID:-unset}
 MASTER_BASE_URL=${MASTER_BASE_URL:-http://dorch-master}
 
-RESOLVE_SCRIPT_PATH=$(dirname "$0")/resolve-by-id.sh
 resolve_by_id() {
-  "$RESOLVE_SCRIPT_PATH" $DATA_ROOT "$1"
+  /resolve-by-id.sh $DATA_ROOT "$1"
 }
 
 cd ${DATA_ROOT:-/var/wads}
