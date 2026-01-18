@@ -4,6 +4,8 @@ SERVER_ADDR=${SERVER_ADDR:-localhost:10666}
 IWAD_PATH=${IWAD_PATH:-/var/wads/iwad.wad}
 WAD_LIST=${WAD_LIST:-""}
 STARTUP_DELAY_SECONDS=${STARTUP_DELAY_SECONDS:-10}
+GAME_ID=${GAME_ID:-unset}
+MASTER_BASE_URL=${MASTER_BASE_URL:-http://dorch-master}
 
 RESOLVE_SCRIPT_PATH=$(dirname "$0")/resolve-by-id.sh
 resolve_by_id() {

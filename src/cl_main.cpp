@@ -614,7 +614,6 @@ static void DORCH_SpectatorTick( void )
 		cleanVal.Bool = false;
 		r_drawplayersprites.ForceSet( cleanVal, CVAR_Bool );
 
-		Printf( "[dorch] spectator mode enabled; requesting spectate...\n" );
 		CLIENTCOMMANDS_Spectate( );
 		return;
 	}

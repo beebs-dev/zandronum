@@ -161,8 +161,13 @@ CVAR( Int, cl_identifytarget, IDENTIFY_TARGET_NAME, CVAR_ARCHIVE )
 CVAR( Int, cl_identifymonsters, IDENTIFY_MONSTERS_OFF, CVAR_ARCHIVE )
 CVAR( Bool, cl_showlargefragmessages, true, CVAR_ARCHIVE )
 CVAR( Bool, cl_drawcoopinfo, true, CVAR_ARCHIVE )
+#ifdef DORCH_SPECTATOR
+CVAR( Bool, r_drawspectatingstring, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG )
+CVAR( Bool, r_drawrespawnstring, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG )
+#else
 CVAR( Bool, r_drawspectatingstring, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG )
 CVAR( Bool, r_drawrespawnstring, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG )
+#endif
 EXTERN_CVAR( Int, con_notifylines )
 EXTERN_CVAR( Bool, cl_stfullscreenhud )
 EXTERN_CVAR( Int, screenblocks )
@@ -258,6 +263,11 @@ bool HUD_IsFullscreen( void )
 //
 void HUD_Render( ULONG ulDisplayPlayer )
 {
+	#ifdef DORCH_SPECTATOR
+		// Spectator screenshots should be world-only.
+		return;
+	#endif
+
 	// Make sure the display player is valid.
 	if ( ulDisplayPlayer >= MAXPLAYERS )
 		return;
@@ -888,6 +898,7 @@ static void HUD_DrawBottomString( ULONG ulDisplayPlayer )
 
 	// If the console player is spectating, draw the spectator message.
 	// [BB] Only when not in free spectate mode.
+	#ifndef DORCH_SPECTATOR
 	if (( r_drawspectatingstring ) && ( players[consoleplayer].bSpectating ) && ( CLIENTDEMO_IsInFreeSpectateMode( ) == false ))
 	{
 		LONG lPosition = JOINQUEUE_GetPositionInLine( consoleplayer );
@@ -914,6 +925,7 @@ static void HUD_DrawBottomString( ULONG ulDisplayPlayer )
 			bottomString += "' to join";
 		}
 	}
+	#endif
 
 	// [RC] Draw the centered bottom message (spectating, following, waiting, etc).
 	if ( bottomString.Len( ) > 0 )
