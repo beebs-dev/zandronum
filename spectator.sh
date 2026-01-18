@@ -67,6 +67,76 @@ term() {
 }
 trap term TERM INT
 
+# Upload logic: POST /screenshot.jpg to the master and delete it on success.
+# On failure, keep the image and back off with jitter to avoid churn.
+upload_failures=0
+upload_next_epoch=0
+
+calc_backoff_delay_seconds() {
+  local failures="$1"
+
+  local base=3
+  local max_cap=$((14 + RANDOM % 3)) # 14-16 seconds
+  local delay=$base
+
+  # Exponential backoff: base * 2^failures, capped to max_cap.
+  local i
+  for (( i=0; i<failures; i++ )); do
+    delay=$((delay * 2))
+    (( delay >= max_cap )) && break
+  done
+  (( delay > max_cap )) && delay=$max_cap
+
+  # Jitter 0-2 seconds, keep within cap.
+  local jitter=$((RANDOM % 3))
+  delay=$((delay + jitter))
+  (( delay > max_cap )) && delay=$max_cap
+
+  echo "$delay"
+}
+
+try_upload_liveshot() {
+  [[ -f /screenshot.jpg ]] || return 0
+
+  if [[ "${GAME_ID:-unset}" == "unset" ]]; then
+    echo "[upload] GAME_ID is unset; skipping upload"
+    return 0
+  fi
+
+  local now
+  now=$(date +%s)
+  if (( now < upload_next_epoch )); then
+    return 0
+  fi
+
+  local url="${MASTER_BASE_URL%/}/game/${GAME_ID}/liveshot"
+  echo "[upload] POST $url (bytes=$(stat -c %s /screenshot.jpg 2>/dev/null || echo "?"))"
+
+  if curl -fsS \
+      --connect-timeout 2 \
+      --max-time 10 \
+      -X POST \
+      -H "Content-Type: image/jpeg" \
+      --data-binary @/screenshot.jpg \
+      "$url" \
+      >/dev/null; then
+    echo "[upload] OK; deleting /screenshot.jpg"
+    rm -f /screenshot.jpg
+    upload_failures=0
+    upload_next_epoch=0
+    return 0
+  fi
+
+  upload_failures=$((upload_failures + 1))
+  local delay
+  delay=$(calc_backoff_delay_seconds "$upload_failures")
+  now=$(date +%s)
+  upload_next_epoch=$((now + delay))
+  echo "[upload] FAILED; keeping /screenshot.jpg, backing off ${delay}s (failures=$upload_failures)"
+  sleep "$delay"
+  return 1
+}
+
 pick_latest_png() {
   # Zandronum/GZDoom family often writes screenshots to a "screenshots" directory
   # under either the working dir or the user's config dir.
@@ -111,6 +181,9 @@ loop_i=0
 while kill -0 "$game_pid" 2>/dev/null; do
   loop_i=$((loop_i + 1))
 
+  # If a previous upload failed, keep retrying it with backoff.
+  try_upload_liveshot || true
+
   src_png=""
   if src_png=$(pick_latest_png 2>/dev/null); then
     src_mtime=$(stat -c %Y "$src_png" 2>/dev/null || echo "")
@@ -127,12 +200,19 @@ while kill -0 "$game_pid" 2>/dev/null; do
         echo "[watcher] Using /screenshot.png directly"
       fi
 
-      echo "[watcher] Converting /screenshot.png -> /screenshot.jpg (resize 640x480!)"
-      convert /screenshot.png -resize 640x480\! /screenshot.jpg.tmp
-      mv -f /screenshot.jpg.tmp /screenshot.jpg
+      if [[ -f /screenshot.jpg ]]; then
+        echo "[watcher] /screenshot.jpg pending upload; not overwriting"
+      else
+        echo "[watcher] Converting /screenshot.png -> /screenshot.jpg (resize 640x480!)"
+        convert /screenshot.png -resize 640x480\! /screenshot.jpg.tmp
+        mv -f /screenshot.jpg.tmp /screenshot.jpg
 
-      out_sz=$(stat -c %s /screenshot.jpg 2>/dev/null || echo "")
-      echo "[watcher] Wrote /screenshot.jpg (bytes=${out_sz:-?})"
+        out_sz=$(stat -c %s /screenshot.jpg 2>/dev/null || echo "")
+        echo "[watcher] Wrote /screenshot.jpg (bytes=${out_sz:-?})"
+      fi
+
+      # Attempt upload immediately after producing a new shot.
+      try_upload_liveshot || true
     fi
   else
     # Emit a heartbeat occasionally so container logs show we're alive.

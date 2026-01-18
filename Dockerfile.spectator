@@ -41,6 +41,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends \
 		ca-certificates \
+		curl \
 		libbz2-1.0 \
 		libcurl4 \
 		libjpeg62-turbo \
