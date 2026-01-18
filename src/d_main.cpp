@@ -1054,42 +1054,58 @@ drawfullconsole:
 				V_RefreshViewBorder ();
 			}
 
-			if (hud_althud && viewheight == SCREENHEIGHT && screenblocks > 10)
-			{
-				StatusBar->DrawBottomStuff (HUD_AltHud);
-				if (DrawFSHUD || automapactive) DrawHUD();
-				StatusBar->Draw (HUD_AltHud);
-				StatusBar->DrawTopStuff (HUD_AltHud);
-			}
-			else 
-			if (viewheight == SCREENHEIGHT && viewactive && screenblocks > 10)
-			{
-				EHudState state = DrawFSHUD ? HUD_Fullscreen : HUD_None;
-				StatusBar->DrawBottomStuff (state);
-				StatusBar->Draw (state);
-				StatusBar->DrawTopStuff (state);
-			}
-			else
-			{
-				StatusBar->DrawBottomStuff (HUD_StatusBar);
-				StatusBar->Draw (HUD_StatusBar);
-				StatusBar->DrawTopStuff (HUD_StatusBar);
-			}
+			#ifndef DORCH_SPECTATOR
+				if (hud_althud && viewheight == SCREENHEIGHT && screenblocks > 10)
+				{
+					StatusBar->DrawBottomStuff (HUD_AltHud);
+					if (DrawFSHUD || automapactive) DrawHUD();
+					StatusBar->Draw (HUD_AltHud);
+					StatusBar->DrawTopStuff (HUD_AltHud);
+				}
+				else 
+				if (viewheight == SCREENHEIGHT && viewactive && screenblocks > 10)
+				{
+					EHudState state = DrawFSHUD ? HUD_Fullscreen : HUD_None;
+					StatusBar->DrawBottomStuff (state);
+					StatusBar->Draw (state);
+					StatusBar->DrawTopStuff (state);
+				}
+				else
+				{
+					StatusBar->DrawBottomStuff (HUD_StatusBar);
+					StatusBar->Draw (HUD_StatusBar);
+					StatusBar->DrawTopStuff (HUD_StatusBar);
+				}
+			#endif
 
 			if ( viewactive )
 			{
 				// [BC] Handle rendering for the possession module.
+				#ifndef DORCH_SPECTATOR
 				POSSESSION_Render( );
+				#endif
 
 				// [BC] Render the scoreboard [BB] respecting free spectate mode.
-				HUD_Render( CLIENTDEMO_IsInFreeSpectateMode( ) == false ? HUD_GetViewPlayer( ) : consoleplayer );
+				#ifdef DORCH_SPECTATOR
+					// Suppress HUD in spectator mode.
+				#else
+					HUD_Render( CLIENTDEMO_IsInFreeSpectateMode( ) == false ? HUD_GetViewPlayer( ) : consoleplayer );
+				#endif
 
 				// Render any medals the player might have been awarded.
-				MEDAL_Render( );
+				#ifdef DORCH_SPECTATOR
+					// Suppress medals in spectator mode.
+				#else
+					MEDAL_Render( );
+				#endif
 			}
 
 			// Render chat prompt.
-			CHAT_Render( );
+			#ifdef DORCH_SPECTATOR
+				// Suppress chat prompt in spectator mode.
+			#else
+				CHAT_Render( );
+			#endif
 			break;
 
 		case GS_INTERMISSION:
@@ -1098,7 +1114,11 @@ drawfullconsole:
 			WI_Drawer ();
 
 			// Render chat prompt.
-			CHAT_Render( );
+			#ifdef DORCH_SPECTATOR
+				// Suppress chat prompt in spectator mode.
+			#else
+				CHAT_Render( );
+			#endif
 			break;
 
 		case GS_FINALE:

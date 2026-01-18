@@ -166,6 +166,11 @@ EXTERN_CVAR( String, name )
 EXTERN_CVAR( Bool, cl_telespy )
 EXTERN_CVAR( Bool, sv_unlimited_pickup )
 
+#ifdef DORCH_SPECTATOR
+EXTERN_CVAR( Int, screenblocks )
+EXTERN_CVAR( Bool, r_drawplayersprites )
+#endif
+
 //*****************************************************************************
 //	CONSOLE COMMANDS/VARIABLES
 
@@ -601,6 +606,13 @@ static void DORCH_SpectatorTick( void )
 		g_bDorchSpectatorInitialized = true;
 		g_iDorchSpectatorNextCycleTic = gametic + TICRATE;
 		g_iDorchSpectatorPendingShotTic = -1;
+
+		// Ensure the rendered view is clean (no status bar, no weapon sprites).
+		UCVarValue cleanVal;
+		cleanVal.Int = 12;
+		screenblocks.ForceSet( cleanVal, CVAR_Int );
+		cleanVal.Bool = false;
+		r_drawplayersprites.ForceSet( cleanVal, CVAR_Bool );
 
 		Printf( "[dorch] spectator mode enabled; requesting spectate...\n" );
 		CLIENTCOMMANDS_Spectate( );
