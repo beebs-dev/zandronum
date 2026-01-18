@@ -1,5 +1,24 @@
 #!/bin/bash
 set -euo pipefail
+
+# Exit immediately on SIGTERM/SIGINT. Do not wait for child processes and do
+# not attempt to upload/flush any work.
+fast_exit() {
+  set +e
+  trap - TERM INT
+  echo "Got SIGTERM/INT; exiting immediately"
+
+  # Kill any background jobs we started (game/Xvfb/ffmpeg).
+  local pids
+  pids=$(jobs -pr 2>/dev/null || true)
+  if [[ -n "${pids}" ]]; then
+    kill -KILL ${pids} 2>/dev/null || true
+  fi
+
+  exit 0
+}
+trap fast_exit TERM INT
+
 SERVER_ADDR=${SERVER_ADDR:-localhost:10666}
 IWAD_PATH=${IWAD_PATH:-/var/wads/iwad.wad}
 WAD_LIST=${WAD_LIST:-""}
@@ -125,18 +144,7 @@ if [[ -n "${RTMP_ENDPOINT}" ]]; then
   ffmpeg_pid=$!
 fi
 
-term() {
-  echo "Got SIGTERM, forwarding to client pid=$game_pid"
-  kill -TERM "$game_pid" 2>/dev/null || true
-  if [[ -n "${ffmpeg_pid}" ]] && kill -0 "$ffmpeg_pid" 2>/dev/null; then
-    echo "Stopping ffmpeg pid=$ffmpeg_pid"
-    kill -TERM "$ffmpeg_pid" 2>/dev/null || true
-  fi
-  if [[ -n "${xvfb_pid:-}" ]] && kill -0 "$xvfb_pid" 2>/dev/null; then
-    echo "Stopping Xvfb pid=$xvfb_pid"
-    kill -TERM "$xvfb_pid" 2>/dev/null || true
-  fi
-}
+term() { fast_exit; }
 trap term TERM INT
 
 # Upload logic: POST /screenshot.webp to the master and delete it on success.
