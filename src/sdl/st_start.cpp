@@ -44,6 +44,8 @@
 #include "i_system.h"
 #include "c_cvars.h"
 
+#include "web/quit_redirect.h"
+
 // MACROS ------------------------------------------------------------------
 
 // TYPES -------------------------------------------------------------------
@@ -350,5 +352,8 @@ bool FTTYStartupScreen::NetLoop(bool (*timer_callback)(void *), void *userdata)
 void ST_Endoom()
 {
 	I_ShutdownJoysticks();
+	WEB_NavigateToGamePageFromQueryParamG();
+	#if !defined(__EMSCRIPTEN__)
 	exit(0);
+	#endif
 }

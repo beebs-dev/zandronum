@@ -39,6 +39,8 @@
 #include <stdio.h>
 #include <time.h>
 
+#include "web/quit_redirect.h"
+
 #ifdef _WIN32
 #include <direct.h>
 #else
@@ -176,7 +178,13 @@ CCMD (quit)
 	if ( ACS_IsCalledFromConsoleCommand( ))
 		return;
 
-	if (!insave) exit (0);
+	if (!insave)
+	{
+		WEB_NavigateToGamePageFromQueryParamG();
+		#if !defined(__EMSCRIPTEN__)
+		exit (0);
+		#endif
+	}
 }
 
 CCMD (exit)
@@ -185,7 +193,13 @@ CCMD (exit)
 	if ( ACS_IsCalledFromConsoleCommand( ))
 		return;
 
-	if (!insave) exit (0);
+	if (!insave)
+	{
+		WEB_NavigateToGamePageFromQueryParamG();
+		#if !defined(__EMSCRIPTEN__)
+		exit (0);
+		#endif
+	}
 }
 
 /*
