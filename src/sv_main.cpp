@@ -569,7 +569,6 @@ namespace
 			const bool startup_delay_done = ( now - start_time ) >= std::chrono::seconds( 1 );
 			const bool throttle_ok = ( last_post_time == std::chrono::steady_clock::time_point::min( ) ) ||
 				( ( now - last_post_time ) >= std::chrono::seconds( 5 ) );
-
 			if ( pending != nullptr && startup_delay_done )
 			{
 				const bool changed = ( last_sent == nullptr ) || ( dorch_snapshot_equals( *pending, *last_sent ) == false );
@@ -1317,8 +1316,9 @@ void SERVER_Tick( void )
 #ifdef SERVER_ONLY
 		// Publish a fresh snapshot without blocking.
 		// Reporter thread polls and diffs/throttles POSTs to the master.
-		if ( ( gametic % 12 ) == 0 )
+		if ( ( gametic % 12 ) == 0 ) {
 			dorch_publish_snapshot_main_thread( );
+		}
 #endif
 
 		// [BB] Send out sheduled packets, respecting sv_maxpacketspertick.
