@@ -27,6 +27,16 @@ GAME_ID=${GAME_ID:-unset}
 MASTER_BASE_URL=${MASTER_BASE_URL:-http://dorch-master}
 RTMP_ENDPOINT=${RTMP_ENDPOINT:-""}
 
+# Streaming/render settings. Defaults favor smoothness and throughput consistency.
+VIDEO_WIDTH=${VIDEO_WIDTH:-480}
+VIDEO_HEIGHT=${VIDEO_HEIGHT:-320}
+VIDEO_FPS=${VIDEO_FPS:-30}
+VIDEO_GOP_SECONDS=${VIDEO_GOP_SECONDS:-2}
+VIDEO_GOP=$((VIDEO_FPS * VIDEO_GOP_SECONDS))
+VIDEO_BITRATE=${VIDEO_BITRATE:-1200k}
+VIDEO_BUFSIZE=${VIDEO_BUFSIZE:-2400k}
+X264_PRESET=${X264_PRESET:-superfast}
+
 resolve_by_id() {
   /resolve-by-id.sh $DATA_ROOT "$1"
 }
@@ -180,7 +190,7 @@ CLIENT=(
   /opt/zandronum/zandronum
   -iwad "$IWAD_PATH"
   -connect "$SERVER_ADDR"
-  -width 640 -height 480
+  -width "$VIDEO_WIDTH" -height "$VIDEO_HEIGHT"
   -soft
   -fullscreen
   +cl_invisiblespectator 1
@@ -213,7 +223,7 @@ rm -f /screenshot.png /screenshot.png.tmp /screenshot.webp /screenshot.webp.tmp
 DISPLAY_NUMBER=${DISPLAY_NUMBER:-99}
 export DISPLAY=":${DISPLAY_NUMBER}"
 
-Xvfb "$DISPLAY" -screen 0 640x480x24 -nolisten tcp -ac &
+Xvfb "$DISPLAY" -screen 0 ${VIDEO_WIDTH}x${VIDEO_HEIGHT}x24 -nolisten tcp -ac &
 xvfb_pid=$!
 sleep 0.2
 
@@ -249,9 +259,14 @@ if [[ -n "${RTMP_ENDPOINT}" ]]; then
   (
     while kill -0 "$game_pid" 2>/dev/null; do
       ffmpeg -hide_banner -loglevel warning \
-        -f x11grab -video_size 640x480 -framerate 30 -i "${DISPLAY}.0" \
+        -thread_queue_size 512 \
+        -f x11grab -video_size ${VIDEO_WIDTH}x${VIDEO_HEIGHT} -framerate ${VIDEO_FPS} -i "${DISPLAY}.0" \
         "${audio_in_args[@]}" \
-        -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p -g 60 -keyint_min 60 \
+        -c:v libx264 -preset ${X264_PRESET} -pix_fmt yuv420p \
+        -g ${VIDEO_GOP} -keyint_min ${VIDEO_GOP} \
+        -b:v ${VIDEO_BITRATE} -maxrate ${VIDEO_BITRATE} -bufsize ${VIDEO_BUFSIZE} \
+        -x264-params "nal-hrd=cbr:force-cfr=1:scenecut=0:open_gop=0" \
+        -fps_mode cfr \
         -c:a aac -b:a 128k -ar 44100 \
         -f flv "${RTMP_ENDPOINT}"
 
@@ -407,8 +422,8 @@ while kill -0 "$game_pid" 2>/dev/null; do
       if [[ -f /screenshot.webp ]]; then
         echo "[watcher] /screenshot.webp pending upload; not overwriting"
       else
-        echo "[watcher] Converting /screenshot.png -> /screenshot.webp (resize 640x480!, quality=70)"
-        convert /screenshot.png -resize 640x480\! -quality 70 /screenshot.webp.tmp
+        echo "[watcher] Converting /screenshot.png -> /screenshot.webp (resize ${VIDEO_WIDTH}x${VIDEO_HEIGHT}!, quality=70)"
+        convert /screenshot.png -resize ${VIDEO_WIDTH}x${VIDEO_HEIGHT}\! -quality 70 /screenshot.webp.tmp
         mv -f /screenshot.webp.tmp /screenshot.webp
 
         out_sz=$(stat -c %s /screenshot.webp 2>/dev/null || echo "")
