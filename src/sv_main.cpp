@@ -1978,11 +1978,6 @@ void SERVER_ConnectNewPlayer( BYTESTREAM_s *pByteStream )
 	// This player is now in the game.
 	playeringame[g_lCurrentClient] = true;
 
-	// [dorch] Make sure all connected clients learn about the special invisible
-	// spectator status so they can hide it from scoreboard spectator lists.
-	if ( g_aClients[g_lCurrentClient].bInvisibleSpectator )
-		SERVERCOMMANDS_SetPlayerStatus( g_lCurrentClient );
-
 	// [BB] If necessary, spawn a voodoo doll for the player.
 	if ( COOP_PlayersVoodooDollsNeedToBeSpawned ( g_lCurrentClient ) )
 	{
@@ -2154,6 +2149,11 @@ void SERVER_ConnectNewPlayer( BYTESTREAM_s *pByteStream )
 		// [BB] Spawn the player at an appropriate start.
 		GAMEMODE_SpawnPlayer ( g_lCurrentClient );
 	}
+
+	// [dorch] Clients reset player data when they receive the spawn command, so
+	// send the replicated "invisible spectator" status bit after spawning.
+	if ( g_aClients[g_lCurrentClient].bInvisibleSpectator )
+		SERVERCOMMANDS_SetPlayerStatus( g_lCurrentClient );
 
 	// Tell the client of any lines that have been altered since the level start.
 	SERVER_UpdateLines( g_lCurrentClient );

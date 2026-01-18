@@ -3330,7 +3330,20 @@ void Scoreboard::UpdateHeight( const unsigned int displayPlayer, const int minYP
 {
 	const ULONG ulRowYOffset = rowHeightToUse + ulGapBetweenRows;
 	const ULONG ulNumActivePlayers = HUD_GetNumPlayers( );
-	const ULONG ulNumSpectators = HUD_GetNumSpectators( );
+	ULONG ulNumSpectators = 0;
+
+	// [dorch] Invisible spectators should not appear on the TAB scoreboard.
+	for ( ULONG ulIdx = 0; ulIdx < MAXPLAYERS; ulIdx++ )
+	{
+		if ( PLAYER_IsValidPlayer( ulIdx ) == false )
+			continue;
+		if ( PLAYER_IsTrueSpectator( &players[ulIdx] ) == false )
+			continue;
+		if ( players[ulIdx].statuses & PLAYERSTATUS_INVISIBLESPECTATOR )
+			continue;
+
+		ulNumSpectators++;
+	}
 	const ULONG marginWidth = ulWidth - 2 * ulBackgroundBorderSize;
 	const int marginRelX = lRelX + ulBackgroundBorderSize;
 
@@ -3458,7 +3471,20 @@ void Scoreboard::Render( const unsigned int displayPlayer, const int minYPos, co
 	SCOREBOARD_DrawColor( backgroundColor, backgroundAmount * alpha, clipLeft, clipTop, clipWidth, clipHeight );
 
 	const ULONG ulNumActivePlayers = HUD_GetNumPlayers( );
-	const ULONG ulNumTrueSpectators = HUD_GetNumSpectators( );
+	ULONG ulNumTrueSpectators = 0;
+
+	// [dorch] Invisible spectators should not appear on the TAB scoreboard.
+	for ( ULONG ulIdx = 0; ulIdx < MAXPLAYERS; ulIdx++ )
+	{
+		if ( PLAYER_IsValidPlayer( ulIdx ) == false )
+			continue;
+		if ( PLAYER_IsTrueSpectator( &players[ulIdx] ) == false )
+			continue;
+		if ( players[ulIdx].statuses & PLAYERSTATUS_INVISIBLESPECTATOR )
+			continue;
+
+		ulNumTrueSpectators++;
+	}
 	const float fCombinedAlpha = fContentAlpha * alpha;
 	LONG lYPos = lRelY + ulBackgroundBorderSize;
 	bool bUseLightBackground = true;
@@ -3525,8 +3551,6 @@ void Scoreboard::Render( const unsigned int displayPlayer, const int minYPos, co
 	// [AK] Draw rows for any true spectators.
 	if ( ulNumTrueSpectators )
 	{
-		const ULONG ulTotalPlayers = ulNumActivePlayers + ulNumTrueSpectators;
-
 		lYPos += rowHeightToUse;
 
 		// [AK] If there are any active players, make the row background light.
@@ -3537,10 +3561,24 @@ void Scoreboard::Render( const unsigned int displayPlayer, const int minYPos, co
 		if (( ulFlags & SCOREBOARDFLAG_DONTSHOWTEAMHEADERS ) == false )
 			SpectatorHeader.Render( displayPlayer, ScoreMargin::NO_TEAM, lYPos, fCombinedAlpha );
 
+		ULONG ulDrawnSpectators = 0;
+
 		// [AK] The index of the first true spectator should be the same as the number of active
 		// players. The list is organized such that all active players come before any true spectators.
-		for ( ULONG ulIdx = ulNumActivePlayers; ulIdx < ulTotalPlayers; ulIdx++ )
-			DrawRow( ulPlayerList[ulIdx], displayPlayer, lYPos, alpha, bUseLightBackground );
+		for ( ULONG ulIdx = ulNumActivePlayers; ( ulIdx < MAXPLAYERS ) && ( ulDrawnSpectators < ulNumTrueSpectators ); ulIdx++ )
+		{
+			const ULONG ulPlayer = ulPlayerList[ulIdx];
+
+			if ( PLAYER_IsValidPlayer( ulPlayer ) == false )
+				continue;
+			if ( PLAYER_IsTrueSpectator( &players[ulPlayer] ) == false )
+				continue;
+			if ( players[ulPlayer].statuses & PLAYERSTATUS_INVISIBLESPECTATOR )
+				continue;
+
+			DrawRow( ulPlayer, displayPlayer, lYPos, alpha, bUseLightBackground );
+			ulDrawnSpectators++;
+		}
 	}
 
 	lYPos = maxClipRectY;
