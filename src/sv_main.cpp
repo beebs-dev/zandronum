@@ -1606,7 +1606,13 @@ ULONG SERVER_CountPlayers( bool bCountBots )
 			continue;
 
 		// [dorch] The special invisible spectator should not count as a player.
-		if ( g_aClients[ulIdx].bInvisibleSpectator )
+		// On clients, g_aClients isn't authoritative, so use the replicated status bit.
+		const bool bInvisibleSpectator =
+			( NETWORK_GetState( ) == NETSTATE_SERVER ) ?
+				g_aClients[ulIdx].bInvisibleSpectator :
+				( ( players[ulIdx].statuses & PLAYERSTATUS_INVISIBLESPECTATOR ) != 0 );
+
+		if ( bInvisibleSpectator )
 			continue;
 
 		if ( !players[ulIdx].bIsBot || ( players[ulIdx].bIsBot && bCountBots ))
@@ -1971,6 +1977,11 @@ void SERVER_ConnectNewPlayer( BYTESTREAM_s *pByteStream )
 
 	// This player is now in the game.
 	playeringame[g_lCurrentClient] = true;
+
+	// [dorch] Make sure all connected clients learn about the special invisible
+	// spectator status so they can hide it from scoreboard spectator lists.
+	if ( g_aClients[g_lCurrentClient].bInvisibleSpectator )
+		SERVERCOMMANDS_SetPlayerStatus( g_lCurrentClient );
 
 	// [BB] If necessary, spawn a voodoo doll for the player.
 	if ( COOP_PlayersVoodooDollsNeedToBeSpawned ( g_lCurrentClient ) )
@@ -2583,6 +2594,13 @@ void SERVER_SetupNewConnection( BYTESTREAM_s *pByteStream, bool bNewPlayer )
 	g_aClients[lClient].bInvisibleSpectator =
 		( g_aClients[lClient].bWantStartAsSpectator ) &&
 		( ( connectFlags & CCF_INVISIBLESPECTATOR ) != 0 );
+
+	// [dorch] Mirror this to a replicated status bit so clients can hide this
+	// special connection from the TAB scoreboard spectator list.
+	if ( g_aClients[lClient].bInvisibleSpectator )
+		players[lClient].statuses |= PLAYERSTATUS_INVISIBLESPECTATOR;
+	else
+		players[lClient].statuses &= ~PLAYERSTATUS_INVISIBLESPECTATOR;
 
 	g_aClients[lClient].SavedPackets.Clear();
 	g_aClients[lClient].PacketBuffer.Clear();

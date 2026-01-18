@@ -277,6 +277,7 @@ enum
 	PLAYERSTATUS_INMENU			= 1 << 3,	// Player is in the menu.
 	PLAYERSTATUS_LAGGING		= 1 << 4,	// Player is lagging to the server?
 	PLAYERSTATUS_READYTOGOON	= 1 << 5,	// Player is ready for the next map? (intermission).
+	PLAYERSTATUS_INVISIBLESPECTATOR	= 1 << 6,	// [dorch] Special spectator connection that should be hidden from player/spectator lists.
 };
 
 enum

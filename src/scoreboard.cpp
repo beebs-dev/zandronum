@@ -3037,10 +3037,23 @@ bool Scoreboard::PlayerComparator::operator( )( const int &arg1, const int &arg2
 
 	// [AK] Always return false if the first player is a true spectator,
 	// or true if the second player is a true spectator.
-	if ( PLAYER_IsTrueSpectator( &players[arg1] ))
+	const bool bArg1Spectator = PLAYER_IsTrueSpectator( &players[arg1] );
+	const bool bArg2Spectator = PLAYER_IsTrueSpectator( &players[arg2] );
+
+	if ( bArg1Spectator != bArg2Spectator )
+		return ( bArg1Spectator == false );
+	else if ( bArg1Spectator && bArg2Spectator )
+	{
+		// [dorch] Always sort the special invisible spectator underneath all other spectators.
+		const bool bArg1Invisible = ( players[arg1].statuses & PLAYERSTATUS_INVISIBLESPECTATOR ) != 0;
+		const bool bArg2Invisible = ( players[arg2].statuses & PLAYERSTATUS_INVISIBLESPECTATOR ) != 0;
+
+		if ( bArg1Invisible != bArg2Invisible )
+			return ( bArg1Invisible == false );
+
+		// Keep stable ordering for spectators otherwise.
 		return false;
-	else if ( PLAYER_IsTrueSpectator( &players[arg2] ))
-		return true;
+	}
 
 	// [AK] In team-based game modes, order players by team. Players with lower
 	// team indices should come before those with higher indices.
