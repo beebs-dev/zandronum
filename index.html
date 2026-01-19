@@ -36,6 +36,23 @@
         white-space: pre-wrap;
       }
 
+      #splash {
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 10;
+        pointer-events: none;
+      }
+
+      #splash img {
+        display: block;
+        width: min(60vw, 420px);
+        max-width: calc(100vw - 40px);
+        height: auto;
+        image-rendering: auto;
+      }
+
       #fmod-credit {
         position: fixed;
         right: 10px;
@@ -68,6 +85,9 @@
 
   <body>
     <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+    <div id="splash">
+      <img src="https://gib.gg/logo.png" alt="Splash" />
+    </div>
     <div id="hud">Loading…</div>
     <div id="fmod-credit">
       <img src="./fmod-logo.svg" alt="FMOD Studio" />
@@ -83,6 +103,7 @@
       const hud = document.getElementById('hud');
       const canvas = document.getElementById('canvas');
       const fmodCredit = document.getElementById('fmod-credit');
+      const splash = document.getElementById('splash');
 
       // Allow the canvas to receive keyboard focus (helps SDL + pointer lock).
       try {
@@ -96,6 +117,9 @@
         try {
           if (fmodCredit) {
             fmodCredit.style.display = s.trim() ? '' : 'none';
+          }
+          if (splash) {
+            splash.style.display = s.trim() ? '' : 'none';
           }
         } catch (_) {}
       }
