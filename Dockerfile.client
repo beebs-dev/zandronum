@@ -45,4 +45,8 @@ RUN mkdir -p /dist \
 
 FROM nginx:alpine AS runtime
 COPY --from=build /dist/ /usr/share/nginx/html/
+
+# Serve repo static/ folder at /static/
+COPY static/ /usr/share/nginx/html/static/
+
 EXPOSE 80
