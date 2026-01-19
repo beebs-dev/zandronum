@@ -46,6 +46,10 @@ SERVER=(
   -iwad "iwad.wad"
   -skill ${SKILL:-3}
   +map ${WARP:-"MAP01"}
+  +sv_mapvote 1
+  +sv_mapvote_showlist 1
+  +sv_mapvote_ratio 0.51
+  +sv_mapvote_timeout 10
   +sv_coop_damagefactor 1.0
   +sv_defaultdmflags 0
   +sv_maxplayers 8

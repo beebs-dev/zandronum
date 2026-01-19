@@ -8,11 +8,27 @@ fast_exit() {
   trap - TERM INT
   echo "Got SIGTERM/INT; exiting immediately"
 
+  # If ffmpeg is running under a watchdog loop, it may not be a direct child of
+  # this shell. Track and kill it via pidfile as a best-effort.
+  if [[ -n "${FFMPEG_PIDFILE:-}" && -f "${FFMPEG_PIDFILE}" ]]; then
+    ffmpeg_child_pid="$(cat "${FFMPEG_PIDFILE}" 2>/dev/null || true)"
+    if [[ -n "${ffmpeg_child_pid}" ]]; then
+      kill -TERM "${ffmpeg_child_pid}" 2>/dev/null || true
+      kill -KILL "${ffmpeg_child_pid}" 2>/dev/null || true
+    fi
+  fi
+
   # Kill any background jobs we started (game/Xvfb/ffmpeg).
   local pids
   pids=$(jobs -pr 2>/dev/null || true)
   if [[ -n "${pids}" ]]; then
     kill -KILL ${pids} 2>/dev/null || true
+  fi
+
+  # Ensure any PulseAudio daemon started in this container is stopped, so that
+  # repeated restarts do not accumulate multiple daemons.
+  if command -v pulseaudio >/dev/null 2>&1; then
+    pulseaudio -k 2>/dev/null || true
   fi
 
   exit 0
@@ -36,6 +52,65 @@ VIDEO_GOP=$((VIDEO_FPS * VIDEO_GOP_SECONDS))
 VIDEO_BITRATE=${VIDEO_BITRATE:-1200k}
 VIDEO_BUFSIZE=${VIDEO_BUFSIZE:-2400k}
 X264_PRESET=${X264_PRESET:-superfast}
+
+# ffmpeg buffering/memory controls.
+#
+# IMPORTANT: ffmpeg's -thread_queue_size is in *packets/frames*, and when the
+# input is raw video (x11grab), packets can be very large. A value like 512 can
+# easily consume hundreds of MiB when the output blocks.
+FFMPEG_THREAD_QUEUE_SIZE=${FFMPEG_THREAD_QUEUE_SIZE:-64}
+
+# rtbufsize limits the input device real-time buffer. This is one of the few
+# knobs that directly caps buffering memory usage for some capture devices.
+FFMPEG_RTBUF_SIZE=${FFMPEG_RTBUF_SIZE:-64M}
+
+# If non-zero and `timeout` is available, periodically restart ffmpeg to avoid
+# unbounded growth from leaks in ffmpeg/device drivers.
+FFMPEG_MAX_UPTIME_SECONDS=${FFMPEG_MAX_UPTIME_SECONDS:-0}
+
+# Make log verbosity configurable to avoid log churn.
+FFMPEG_LOGLEVEL=${FFMPEG_LOGLEVEL:-warning}
+
+# Where the RTMP loop writes the current ffmpeg (or timeout) PID so that traps
+# can kill it reliably.
+FFMPEG_PIDFILE=${FFMPEG_PIDFILE:-/tmp/dorch-ffmpeg.pid}
+
+# Reduce encoder buffering.
+X264_TUNE=${X264_TUNE:-zerolatency}
+
+# Optional periodic memory telemetry to confirm RSS stays bounded.
+MEM_LOG_INTERVAL_SECONDS=${MEM_LOG_INTERVAL_SECONDS:-60}
+
+mem_rss_kb() {
+  local pid="$1"
+  [[ -n "$pid" ]] || return 1
+  [[ -r "/proc/${pid}/status" ]] || return 1
+  awk '$1=="VmRSS:"{print $2; exit 0}' "/proc/${pid}/status" 2>/dev/null
+}
+
+log_mem_snapshot() {
+  local now
+  now="$(date -Is 2>/dev/null || date)"
+
+  local cgroup_mem=""
+  if [[ -r /sys/fs/cgroup/memory.current ]]; then
+    cgroup_mem="$(cat /sys/fs/cgroup/memory.current 2>/dev/null || true)"
+  elif [[ -r /sys/fs/cgroup/memory/memory.usage_in_bytes ]]; then
+    cgroup_mem="$(cat /sys/fs/cgroup/memory/memory.usage_in_bytes 2>/dev/null || true)"
+  fi
+
+  local ffmpeg_child_pid=""
+  if [[ -f "${FFMPEG_PIDFILE}" ]]; then
+    ffmpeg_child_pid="$(cat "${FFMPEG_PIDFILE}" 2>/dev/null || true)"
+  fi
+
+  local game_rss="" xvfb_rss="" ffmpeg_rss=""
+  game_rss="$(mem_rss_kb "${game_pid:-}" 2>/dev/null || true)"
+  xvfb_rss="$(mem_rss_kb "${xvfb_pid:-}" 2>/dev/null || true)"
+  ffmpeg_rss="$(mem_rss_kb "${ffmpeg_child_pid:-}" 2>/dev/null || true)"
+
+  echo "[mem] ${now} cgroup_bytes=${cgroup_mem:-?} rss_kb(game=${game_rss:-?} xvfb=${xvfb_rss:-?} ffmpeg=${ffmpeg_rss:-?})"
+}
 
 resolve_by_id() {
   /resolve-by-id.sh $DATA_ROOT "$1"
@@ -251,27 +326,47 @@ if [[ -n "${RTMP_ENDPOINT}" ]]; then
 
   audio_in_args=( -f lavfi -i "anullsrc=channel_layout=stereo:sample_rate=44100" )
   if [[ -n "${audio_fifo}" && -p "${audio_fifo}" ]]; then
-    audio_in_args=( -thread_queue_size 512 -f s16le -ar 44100 -ac 2 -i "${audio_fifo}" )
+    audio_in_args=( -thread_queue_size ${FFMPEG_THREAD_QUEUE_SIZE} -f s16le -ar 44100 -ac 2 -i "${audio_fifo}" )
   elif [[ "$have_pulse" == "1" ]]; then
-    audio_in_args=( -thread_queue_size 512 -f pulse -i "${pulse_monitor_source:-stream.monitor}" )
+    audio_in_args=( -thread_queue_size ${FFMPEG_THREAD_QUEUE_SIZE} -f pulse -i "${pulse_monitor_source:-stream.monitor}" )
   fi
 
   (
     while kill -0 "$game_pid" 2>/dev/null; do
-      ffmpeg -hide_banner -loglevel warning \
-        -thread_queue_size 512 \
-        -f x11grab -video_size ${VIDEO_WIDTH}x${VIDEO_HEIGHT} -framerate ${VIDEO_FPS} -i "${DISPLAY}.0" \
-        "${audio_in_args[@]}" \
-        -c:v libx264 -preset ${X264_PRESET} -pix_fmt yuv420p \
-        -profile:v baseline -level 3.0 \
-        -g ${VIDEO_GOP} -keyint_min ${VIDEO_GOP} -sc_threshold 0 \
-        -force_key_frames "expr:gte(t,n_forced*${VIDEO_GOP_SECONDS})" \
-        -b:v ${VIDEO_BITRATE} -maxrate ${VIDEO_BITRATE} -bufsize ${VIDEO_BUFSIZE} \
-        -r ${VIDEO_FPS} -vsync cfr \
-        -c:a aac -b:a 128k -ar 44100 \
-        -f flv "${RTMP_ENDPOINT}"
+      # `set -e` is active globally. Temporarily disable it so that we can
+      # observe ffmpeg's exit code and reconnect on failure.
+      set +e
 
+      ffmpeg_cmd=(
+        ffmpeg -hide_banner -loglevel ${FFMPEG_LOGLEVEL}
+        -fflags nobuffer -flags low_delay -max_delay 0
+        -thread_queue_size ${FFMPEG_THREAD_QUEUE_SIZE}
+        -f x11grab -rtbufsize ${FFMPEG_RTBUF_SIZE} -video_size ${VIDEO_WIDTH}x${VIDEO_HEIGHT} -framerate ${VIDEO_FPS} -i "${DISPLAY}.0"
+        "${audio_in_args[@]}"
+        -c:v libx264 -preset ${X264_PRESET} -tune ${X264_TUNE} -pix_fmt yuv420p
+        -profile:v baseline -level 3.0
+        -g ${VIDEO_GOP} -keyint_min ${VIDEO_GOP} -sc_threshold 0
+        -force_key_frames "expr:gte(t,n_forced*${VIDEO_GOP_SECONDS})"
+        -b:v ${VIDEO_BITRATE} -maxrate ${VIDEO_BITRATE} -bufsize ${VIDEO_BUFSIZE}
+        -r ${VIDEO_FPS} -vsync cfr
+        -c:a aac -b:a 128k -ar 44100
+        -muxdelay 0 -muxpreload 0 -flvflags no_duration_filesize
+        -f flv "${RTMP_ENDPOINT}"
+      )
+
+      # Run ffmpeg under a PID we can track. When using `timeout`, the PID is
+      # the timeout wrapper (which will in turn terminate ffmpeg).
+      if [[ "${FFMPEG_MAX_UPTIME_SECONDS}" != "0" ]] && command -v timeout >/dev/null 2>&1; then
+        timeout --signal=TERM --kill-after=5 "${FFMPEG_MAX_UPTIME_SECONDS}" "${ffmpeg_cmd[@]}" &
+      else
+        "${ffmpeg_cmd[@]}" &
+      fi
+      ffmpeg_child_pid=$!
+      echo "${ffmpeg_child_pid}" >"${FFMPEG_PIDFILE}" 2>/dev/null || true
+      wait "${ffmpeg_child_pid}"
       rc=$?
+      rm -f "${FFMPEG_PIDFILE}" 2>/dev/null || true
+      set -e
       # If the game is gone, don't keep reconnecting.
       if ! kill -0 "$game_pid" 2>/dev/null; then
         exit 0
@@ -400,6 +495,10 @@ last_src_mtime=""
 loop_i=0
 while kill -0 "$game_pid" 2>/dev/null; do
   loop_i=$((loop_i + 1))
+
+  if [[ "${MEM_LOG_INTERVAL_SECONDS}" != "0" ]] && (( loop_i % MEM_LOG_INTERVAL_SECONDS == 0 )); then
+    log_mem_snapshot || true
+  fi
 
   # If a previous upload failed, keep retrying it with backoff.
   try_upload_liveshot || true
