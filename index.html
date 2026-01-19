@@ -34,13 +34,14 @@
       #loading-underlay {
         position: absolute;
         inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
         pointer-events: none;
       }
 
-      #loading-underlay img {
+      #loading-underlay .underlay-sprite {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(calc(-50% + var(--underlay-x, 0px)), -50%);
         width: 384px;
         height: 384px;
         image-rendering: pixelated;
@@ -59,9 +60,11 @@
         pointer-events: none;
         background-image: url('./emerald-5-short.png');
         background-repeat: repeat-x;
-        background-position: left bottom;
+        background-position-x: 0px;
+        background-position-y: bottom;
         background-size: 256px 192px;
         image-rendering: pixelated;
+        animation: loading-pan-x 24s linear infinite;
       }
 
       #loading-border-top {
@@ -74,9 +77,16 @@
         pointer-events: none;
         background-image: url('./emerald-1-alt.png');
         background-repeat: repeat-x;
-        background-position: left top;
+        background-position-x: 0px;
+        background-position-y: top;
         background-size: 256px 192px;
         image-rendering: pixelated;
+        animation: loading-pan-x 24s linear infinite;
+      }
+
+      @keyframes loading-pan-x {
+        from { background-position-x: 0px; }
+        to { background-position-x: 256px; }
       }
 
       #loading-vignette {
@@ -171,7 +181,13 @@
     <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
     <div id="loading-bg">
       <div id="loading-underlay" aria-hidden="true">
-        <img src="./emerald-4.png" alt="" />
+        <img class="underlay-sprite" data-base="-2304" src="./emerald-7.png" alt="" />
+        <img class="underlay-sprite" data-base="-1536" src="./emerald-4.png" alt="" />
+        <img class="underlay-sprite" data-base="-768" src="./emerald-7.png" alt="" />
+        <img class="underlay-sprite" data-base="0" src="./emerald-4.png" alt="" />
+        <img class="underlay-sprite" data-base="768" src="./emerald-7.png" alt="" />
+        <img class="underlay-sprite" data-base="1536" src="./emerald-4.png" alt="" />
+        <img class="underlay-sprite" data-base="2304" src="./emerald-7.png" alt="" />
       </div>
       <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
         <defs>
@@ -219,9 +235,65 @@
       const loadingBorderTop = document.getElementById('loading-border-top');
       const loadingBorder = document.getElementById('loading-border');
       const loadingVignette = document.getElementById('loading-vignette');
+      const bgPattern = document.getElementById('bg-pat');
       const bgSprite = document.getElementById('bg-sprite');
+      const underlaySprites = Array.from(document.querySelectorAll('#loading-underlay .underlay-sprite'));
 
       let bgAnimTimer = 0;
+      let bgPanRaf = 0;
+      let bgPanStart = 0;
+
+      function updateBgPan(ts) {
+        try {
+          if (!bgPanStart) bgPanStart = ts;
+
+          // Pan speed in CSS pixels per second; modulo by tile width for seamless looping.
+          const speedPxPerSec = 8;
+          const elapsedSec = (ts - bgPanStart) / 1000;
+
+          const tileW = 256;
+          const offset = (elapsedSec * speedPxPerSec) % tileW;
+          if (bgPattern) {
+            bgPattern.setAttribute('x', offset.toFixed(2));
+          }
+
+          // Underlay: keep the “single centered square” look, but pan it and wrap around.
+          // We render multiple copies (spaced 1024px apart) and wrap their x offsets.
+          if (underlaySprites.length) {
+            const spacing = 768; // px between underlay sprite bases
+            const range = spacing * underlaySprites.length;
+            const panPx = elapsedSec * speedPxPerSec;
+
+            const wrap = (value, wrapRange) => {
+              const half = wrapRange / 2;
+              // JS % can be negative; normalize.
+              return ((((value + half) % wrapRange) + wrapRange) % wrapRange) - half;
+            };
+
+            for (const el of underlaySprites) {
+              const base = Number(el.dataset.base) || 0;
+              const x = wrap(base + panPx, range);
+              el.style.setProperty('--underlay-x', `${x.toFixed(2)}px`);
+            }
+          }
+        } catch (_) {}
+
+        bgPanRaf = window.requestAnimationFrame(updateBgPan);
+      }
+
+      function startBgPan() {
+        if (bgPanRaf) return;
+        bgPanStart = 0;
+        bgPanRaf = window.requestAnimationFrame(updateBgPan);
+      }
+
+      function stopBgPan() {
+        if (!bgPanRaf) return;
+        window.cancelAnimationFrame(bgPanRaf);
+        bgPanRaf = 0;
+        bgPanStart = 0;
+      }
+
       function updateBgFrame() {
         try {
           if (!bgSprite) return;
@@ -234,12 +306,14 @@
         if (bgAnimTimer) return;
         updateBgFrame();
         bgAnimTimer = window.setInterval(updateBgFrame, 1000);
+        startBgPan();
       }
 
       function stopBgAnim() {
         if (!bgAnimTimer) return;
         window.clearInterval(bgAnimTimer);
         bgAnimTimer = 0;
+        stopBgPan();
       }
 
       // Allow the canvas to receive keyboard focus (helps SDL + pointer lock).
