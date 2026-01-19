@@ -455,8 +455,8 @@
           stats.lkRecv++;
         });
 
-        setHud('Click to start…');
-        await firstGesture;
+        // Start immediately; browsers may still require a gesture for audio and pointer lock,
+        // but the game can load and run without blocking on a click.
         setHud('Connecting WebRTC…');
         await room.connect(url, token);
 
