@@ -1032,7 +1032,13 @@ bool FMODSoundRenderer::Init()
 #endif
 
 	// Set software channels according to snd_channels
+	#ifdef __EMSCRIPTEN__
+	// The web build often has many overlapping short SFX. The desktop default (32)
+	// leads to aggressive channel stealing / dropped sounds.
+	result = Sys->setSoftwareChannels(MAX<int>((int)snd_channels, 128) + NUM_EXTRA_SOFTWARE_CHANNELS);
+	#else
 	result = Sys->setSoftwareChannels(snd_channels + NUM_EXTRA_SOFTWARE_CHANNELS);
+	#endif
 	if (result != FMOD_OK)
 	{
 		Printf(TEXTCOLOR_BLUE"Failed to set the preferred number of channels. (Error %d)\n", result);

@@ -58,6 +58,9 @@ SERVER=(
   +sv_maxclienttries 9999
   +sv_rejectmessagekicktime 0
   +sv_maxplayers $MAX_PLAYERS
+  +sv_doubleammo 1
+  +sv_weaponstay 1
+  +sv_itemrespawn 1
 )
 
 if [[ -n "${WAD_LIST:-}" ]]; then

@@ -35,12 +35,44 @@
         pointer-events: none;
         white-space: pre-wrap;
       }
+
+      #fmod-credit {
+        position: fixed;
+        right: 10px;
+        bottom: 10px;
+        max-width: min(420px, calc(100vw - 20px));
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: #e6edf3;
+        font: 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        line-height: 1.2;
+        background: rgba(0,0,0,0.55);
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 8px;
+        padding: 8px 10px;
+        pointer-events: none;
+      }
+
+      #fmod-credit img {
+        height: 22px;
+        width: auto;
+        flex: 0 0 auto;
+      }
+
+      #fmod-credit .fmod-text {
+        font-size: 11px;
+      }
     </style>
   </head>
 
   <body>
     <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
     <div id="hud">Loading…</div>
+    <div id="fmod-credit">
+      <img src="./fmod-logo.svg" alt="FMOD Studio" />
+      <div class="fmod-text">Audio Engine: FMOD Studio by Firelight Technologies Pty Ltd.</div>
+    </div>
 
     <!-- LiveKit JS SDK (UMD build) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/livekit-client/2.15.7/livekit-client.umd.js"></script>
@@ -50,6 +82,7 @@
     <script>
       const hud = document.getElementById('hud');
       const canvas = document.getElementById('canvas');
+      const fmodCredit = document.getElementById('fmod-credit');
 
       // Allow the canvas to receive keyboard focus (helps SDL + pointer lock).
       try {
@@ -58,7 +91,13 @@
       } catch (_) {}
 
       function setHud(text) {
-        hud.textContent = String(text ?? '');
+        const s = String(text ?? '');
+        hud.textContent = s;
+        try {
+          if (fmodCredit) {
+            fmodCredit.style.display = s.trim() ? '' : 'none';
+          }
+        } catch (_) {}
       }
 
       function getParam(name) {
