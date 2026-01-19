@@ -17,14 +17,34 @@
         display: block;
         position: fixed;
         inset: 0;
+        z-index: 0;
         width: 100vw;
         height: 100vh;
+        image-rendering: pixelated;
+      }
+
+      #loading-bg {
+        position: fixed;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+      }
+
+      #loading-bg svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+        opacity: 0.35;
+      }
+
+      #loading-bg image {
         image-rendering: pixelated;
       }
       #hud {
         position: fixed;
         left: 10px;
         bottom: 10px;
+        z-index: 12;
         max-width: min(720px, calc(100vw - 20px));
         color: #e6edf3;
         font: 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -61,6 +81,7 @@
         display: flex;
         align-items: center;
         gap: 10px;
+        z-index: 11;
         color: #e6edf3;
         font: 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
         line-height: 1.2;
@@ -85,6 +106,27 @@
 
   <body>
     <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+    <div id="loading-bg">
+      <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+        <defs>
+          <!-- 3-frame 64x64 spritesheet stitched horizontally (192x64).
+               Scale 4x -> frame is 256x256; tile that across the viewport.
+          -->
+          <pattern id="bg-pat" patternUnits="userSpaceOnUse" width="256" height="256">
+            <image
+              id="bg-sprite"
+              href="https://gib.gg/red.png"
+              x="0"
+              y="0"
+              width="768"
+              height="256"
+              preserveAspectRatio="none"
+            />
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#bg-pat)" />
+      </svg>
+    </div>
     <div id="splash">
       <img src="https://gib.gg/logo.png" alt="Splash" />
     </div>
@@ -104,6 +146,29 @@
       const canvas = document.getElementById('canvas');
       const fmodCredit = document.getElementById('fmod-credit');
       const splash = document.getElementById('splash');
+      const loadingBg = document.getElementById('loading-bg');
+      const bgSprite = document.getElementById('bg-sprite');
+
+      let bgAnimTimer = 0;
+      function updateBgFrame() {
+        try {
+          if (!bgSprite) return;
+          const frame = Math.floor(Date.now() / 1000) % 3;
+          bgSprite.setAttribute('x', String(-frame * 256));
+        } catch (_) {}
+      }
+
+      function startBgAnim() {
+        if (bgAnimTimer) return;
+        updateBgFrame();
+        bgAnimTimer = window.setInterval(updateBgFrame, 1000);
+      }
+
+      function stopBgAnim() {
+        if (!bgAnimTimer) return;
+        window.clearInterval(bgAnimTimer);
+        bgAnimTimer = 0;
+      }
 
       // Allow the canvas to receive keyboard focus (helps SDL + pointer lock).
       try {
@@ -115,11 +180,20 @@
         const s = String(text ?? '');
         hud.textContent = s;
         try {
+          const visible = !!s.trim();
           if (fmodCredit) {
-            fmodCredit.style.display = s.trim() ? '' : 'none';
+            fmodCredit.style.display = visible ? '' : 'none';
           }
           if (splash) {
-            splash.style.display = s.trim() ? '' : 'none';
+            splash.style.display = visible ? '' : 'none';
+          }
+          if (loadingBg) {
+            loadingBg.style.display = visible ? '' : 'none';
+          }
+          if (visible) {
+            startBgAnim();
+          } else {
+            stopBgAnim();
           }
         } catch (_) {}
       }
