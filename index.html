@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Zandronum (Web)</title>
+	  <link rel="icon" type="image/png" href="https://gib.gg/favicon.png" />
+    <title>PLAY - GIB.GG</title>
     <style>
       html, body {
         margin: 0;
@@ -76,6 +77,19 @@
         background-position: left top;
         background-size: 256px 192px;
         image-rendering: pixelated;
+      }
+
+      #loading-vignette {
+        position: fixed;
+        inset: 0;
+        z-index: 9;
+        pointer-events: none;
+        background: radial-gradient(
+          ellipse at center,
+          rgba(0, 0, 0, 0) 0%,
+          rgba(0, 0, 0, 0) 55%,
+          rgba(0, 0, 0, 0.65) 100%
+        );
       }
 
       #loading-bg svg {
@@ -181,6 +195,7 @@
     </div>
     <div id="loading-border-top" aria-hidden="true"></div>
     <div id="loading-border" aria-hidden="true"></div>
+    <div id="loading-vignette" aria-hidden="true"></div>
     <div id="splash">
       <img src="https://gib.gg/logo.png" alt="Splash" />
     </div>
@@ -203,6 +218,7 @@
       const loadingBg = document.getElementById('loading-bg');
       const loadingBorderTop = document.getElementById('loading-border-top');
       const loadingBorder = document.getElementById('loading-border');
+      const loadingVignette = document.getElementById('loading-vignette');
       const bgSprite = document.getElementById('bg-sprite');
 
       let bgAnimTimer = 0;
@@ -251,6 +267,9 @@
           }
           if (loadingBorder) {
             loadingBorder.style.display = visible ? '' : 'none';
+          }
+          if (loadingVignette) {
+            loadingVignette.style.display = visible ? '' : 'none';
           }
           if (visible) {
             startBgAnim();
