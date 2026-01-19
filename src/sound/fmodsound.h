@@ -5,6 +5,29 @@
 #include "i_sound.h"
 #include "fmod_wrap.h"
 
+// Detect modern FMOD Core (2.x) SDKs (e.g. HTML5) vs legacy FMOD Ex-style SDKs.
+// FMOD Core 2.x uses a small version number like 0x00020312 (2.03.12).
+// FMOD Ex 4.x uses values like 0x00043800.
+#ifndef ZANDRONUM_FMOD_CORE2
+#if defined(FMOD_VERSION) && (FMOD_VERSION >= 0x00020000) && (FMOD_VERSION < 0x00030000)
+#define ZANDRONUM_FMOD_CORE2 1
+#else
+#define ZANDRONUM_FMOD_CORE2 0
+#endif
+#endif
+
+// FMOD Core API 2.x uses F_CALL for calling convention and ChannelControl-based callbacks.
+// Older integrations used F_CALLBACK and Channel-based callback typedefs.
+#ifndef F_CALLBACK
+#define F_CALLBACK F_CALL
+#endif
+
+// FMOD Ex had a driver capability type; FMOD Core 2.x removed it.
+// Keep the existing interface compiling; caps will be treated as 0 on modern SDKs.
+#if ZANDRONUM_FMOD_CORE2 && !defined(FMOD_CAPS_HARDWARE)
+typedef unsigned int FMOD_CAPS;
+#endif
+
 class FMODSoundRenderer : public SoundRenderer
 {
 public:
@@ -76,8 +99,13 @@ private:
 	QWORD_UNION DSPClock;
 	int OutputRate;
 
+#if ZANDRONUM_FMOD_CORE2
+	static FMOD_RESULT F_CALLBACK ChannelCallback(FMOD_CHANNELCONTROL *channelcontrol, FMOD_CHANNELCONTROL_TYPE controltype, FMOD_CHANNELCONTROL_CALLBACK_TYPE type, void *data1, void *data2);
+	static float F_CALLBACK RolloffCallback(FMOD_CHANNELCONTROL *channelcontrol, float distance);
+#else
 	static FMOD_RESULT F_CALLBACK ChannelCallback(FMOD_CHANNEL *channel, FMOD_CHANNEL_CALLBACKTYPE type, void *data1, void *data2);
 	static float F_CALLBACK RolloffCallback(FMOD_CHANNEL *channel, float distance);
+#endif
 
 	bool HandleChannelDelay(FMOD::Channel *chan, FISoundChannel *reuse_chan, int flags, float freq) const;
 	FISoundChannel *CommonChannelSetup(FMOD::Channel *chan, FISoundChannel *reuse_chan) const;

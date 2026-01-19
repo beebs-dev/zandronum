@@ -347,6 +347,22 @@ endif( NOT FMOD_LIB_NAME )
 
 # Search for FMOD include files
 
+# Emscripten/WebAssembly: use the bundled FMOD HTML5 SDK if present.
+# This bypasses the usual FMOD Ex desktop search paths and links the
+# prebuilt Emscripten static library.
+if( EMSCRIPTEN AND NOT NO_FMOD )
+	set( FMOD_HTML5_ROOT "${CMAKE_SOURCE_DIR}/fmod-html5" )
+	if( EXISTS "${FMOD_HTML5_ROOT}/api/core/inc/fmod.hpp" )
+		set( FMOD_INCLUDE_DIR "${FMOD_HTML5_ROOT}/api/core/inc" CACHE PATH "FMOD HTML5 include directory" FORCE )
+	endif()
+	if( EXISTS "${FMOD_HTML5_ROOT}/api/core/lib/w32/fmod_wasm.a" )
+		set( FMOD_LIBRARY "${FMOD_HTML5_ROOT}/api/core/lib/w32/fmod_wasm.a" CACHE FILEPATH "FMOD HTML5 Emscripten static library" FORCE )
+	endif()
+	if( NOT EXISTS "${FMOD_HTML5_ROOT}/api/core/inc/fmod.hpp" OR NOT EXISTS "${FMOD_HTML5_ROOT}/api/core/lib/w32/fmod_wasm.a" )
+		message( SEND_ERROR "FMOD HTML5 SDK not found (expected fmod-html5/api/core/inc/fmod.hpp and fmod-html5/api/core/lib/w32/fmod_wasm.a). Either provide the SDK or configure with -DNO_FMOD=ON to use the WebAudio backend." )
+	endif()
+endif()
+
 if( NOT WIN32 )
 	find_path( FMOD_INCLUDE_DIR fmod.hpp
 		PATHS ${FMOD_LOCAL_INC_DIRS} )
@@ -699,16 +715,12 @@ message( STATUS "Fluid synth libs: ${FLUIDSYNTH_LIBRARIES}" )
 set( ZDOOM_LIBS ${ZDOOM_LIBS} "${ZLIB_LIBRARIES}" "${JPEG_LIBRARIES}" "${BZIP2_LIBRARIES}" "${GME_LIBRARIES}" )
 # [BB] Without sound, we don't need FMOD.
 if ( NOT NO_SOUND )
-	if( NOT EMSCRIPTEN )
-		if( NOT NO_FMOD )
-			set( ZDOOM_LIBS ${ZDOOM_LIBS} "${FMOD_LIBRARY}" )
-			include_directories( "${ZLIB_INCLUDE_DIR}" "${FMOD_INCLUDE_DIR}" "${BZIP2_INCLUDE_DIR}" "${LZMA_INCLUDE_DIR}" "${JPEG_INCLUDE_DIR}" "${GME_INCLUDE_DIR}" )
-		else( NOT NO_FMOD )
-			include_directories( "${ZLIB_INCLUDE_DIR}" "${BZIP2_INCLUDE_DIR}" "${LZMA_INCLUDE_DIR}" "${JPEG_INCLUDE_DIR}" "${GME_INCLUDE_DIR}" )
-		endif( NOT NO_FMOD )
-	else( NOT EMSCRIPTEN )
+	if( NOT NO_FMOD )
+		set( ZDOOM_LIBS ${ZDOOM_LIBS} "${FMOD_LIBRARY}" )
+		include_directories( "${ZLIB_INCLUDE_DIR}" "${FMOD_INCLUDE_DIR}" "${BZIP2_INCLUDE_DIR}" "${LZMA_INCLUDE_DIR}" "${JPEG_INCLUDE_DIR}" "${GME_INCLUDE_DIR}" )
+	else( NOT NO_FMOD )
 		include_directories( "${ZLIB_INCLUDE_DIR}" "${BZIP2_INCLUDE_DIR}" "${LZMA_INCLUDE_DIR}" "${JPEG_INCLUDE_DIR}" "${GME_INCLUDE_DIR}" )
-	endif( NOT EMSCRIPTEN )
+	endif( NOT NO_FMOD )
 else ( NOT NO_SOUND )
 	include_directories( "${ZLIB_INCLUDE_DIR}" "${BZIP2_INCLUDE_DIR}" "${LZMA_INCLUDE_DIR}" "${JPEG_INCLUDE_DIR}" "${GME_INCLUDE_DIR}" )
 endif ( NOT NO_SOUND )
@@ -1414,8 +1426,9 @@ add_executable( zdoom WIN32
 	resourcefiles/file_directory.cpp
 	resourcefiles/resourcefile.cpp
 	sfmt/SFMT.cpp
-	# Sound backend: FMOD on native, WebAudio/SDL on Emscripten.
-	$<$<BOOL:${EMSCRIPTEN}>:sound/webaudiosound.cpp>
+	# Sound backend: FMOD (including Emscripten via FMOD HTML5 SDK), with WebAudio as a fallback.
+	$<$<AND:$<BOOL:${EMSCRIPTEN}>,$<BOOL:${NO_FMOD}>>:sound/webaudiosound.cpp>
+	$<$<AND:$<BOOL:${EMSCRIPTEN}>,$<NOT:$<BOOL:${NO_FMOD}>>>:sound/fmodsound.cpp>
 	$<$<AND:$<NOT:$<BOOL:${EMSCRIPTEN}>>,$<BOOL:${NO_FMOD}>>:sound/sdlaudiosound.cpp>
 	$<$<AND:$<NOT:$<BOOL:${EMSCRIPTEN}>>,$<NOT:$<BOOL:${NO_FMOD}>>>:sound/fmodsound.cpp>
 	sound/i_music.cpp
@@ -1529,7 +1542,7 @@ if( EMSCRIPTEN )
 		"-sUSE_SDL=1"
 		"-sALLOW_MEMORY_GROWTH=1"
 		"-sFORCE_FILESYSTEM=1"
-		"-sEXPORTED_RUNTIME_METHODS=['callMain','FS']"
+		"-sEXPORTED_RUNTIME_METHODS=['callMain','FS','ccall','cwrap','setValue','getValue']"
 		"-sMODULARIZE=1"
 		"-sEXPORT_NAME=createZandronumModule"
 		"-sINVOKE_RUN=0"
