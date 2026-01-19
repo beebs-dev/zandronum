@@ -48,6 +48,21 @@
         image-rendering: pixelated;
       }
 
+      #loading-border-top {
+        position: fixed;
+        left: 0;
+        right: 0;
+        top: 0;
+        height: 334px;
+        z-index: 2;
+        pointer-events: none;
+        background-image: url('./emerald-1-alt.png');
+        background-repeat: repeat-x;
+        background-position: left top;
+        background-size: 256px 192px;
+        image-rendering: pixelated;
+      }
+
       #loading-bg svg {
         width: 100%;
         height: 100%;
@@ -78,7 +93,7 @@
         position: fixed;
         left: 50%;
         top: 50%;
-        transform: translate(-50%, -100%);
+        transform: translate(-50%, -50%);
         z-index: 10;
         pointer-events: none;
       }
@@ -145,6 +160,7 @@
         <rect width="100%" height="100%" fill="url(#bg-pat)" />
       </svg>
     </div>
+    <div id="loading-border-top" aria-hidden="true"></div>
     <div id="loading-border" aria-hidden="true"></div>
     <div id="splash">
       <img src="https://gib.gg/logo.png" alt="Splash" />
@@ -166,6 +182,7 @@
       const fmodCredit = document.getElementById('fmod-credit');
       const splash = document.getElementById('splash');
       const loadingBg = document.getElementById('loading-bg');
+      const loadingBorderTop = document.getElementById('loading-border-top');
       const loadingBorder = document.getElementById('loading-border');
       const bgSprite = document.getElementById('bg-sprite');
 
@@ -209,6 +226,9 @@
           }
           if (loadingBg) {
             loadingBg.style.display = visible ? '' : 'none';
+          }
+          if (loadingBorderTop) {
+            loadingBorderTop.style.display = visible ? '' : 'none';
           }
           if (loadingBorder) {
             loadingBorder.style.display = visible ? '' : 'none';
