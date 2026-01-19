@@ -30,6 +30,24 @@
         pointer-events: none;
       }
 
+      /* Bottom border image: emerald-5.png is 128x167; scale 2x -> 256x334.
+         Tile horizontally across the bottom edge while loading.
+      */
+      #loading-border {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 334px;
+        z-index: 2;
+        pointer-events: none;
+        background-image: url('./emerald-5.png');
+        background-repeat: repeat-x;
+        background-position: left bottom;
+        background-size: 256px 334px;
+        image-rendering: pixelated;
+      }
+
       #loading-bg svg {
         width: 100%;
         height: 100%;
@@ -127,6 +145,7 @@
         <rect width="100%" height="100%" fill="url(#bg-pat)" />
       </svg>
     </div>
+    <div id="loading-border" aria-hidden="true"></div>
     <div id="splash">
       <img src="https://gib.gg/logo.png" alt="Splash" />
     </div>
@@ -147,6 +166,7 @@
       const fmodCredit = document.getElementById('fmod-credit');
       const splash = document.getElementById('splash');
       const loadingBg = document.getElementById('loading-bg');
+      const loadingBorder = document.getElementById('loading-border');
       const bgSprite = document.getElementById('bg-sprite');
 
       let bgAnimTimer = 0;
@@ -189,6 +209,9 @@
           }
           if (loadingBg) {
             loadingBg.style.display = visible ? '' : 'none';
+          }
+          if (loadingBorder) {
+            loadingBorder.style.display = visible ? '' : 'none';
           }
           if (visible) {
             startBgAnim();
