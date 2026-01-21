@@ -923,8 +923,12 @@
           const SDLK_DOWN = 274;
           const SDLK_LCTRL = 306;
           const SDLK_SPACE = 32;
+          const SDLK_E = 101;
           const SDLK_ESCAPE = 27;
           const SDLK_TAB = 9;
+
+          // SDL 1.2 mouse button IDs.
+          const SDL_BUTTON_LEFT = 1;
 
           const keyDownState = new Map();
 
@@ -949,6 +953,16 @@
               canvas.dispatchEvent(ev);
               document.dispatchEvent(ev);
             } catch (_) {}
+          }
+
+          function sendMouseButton(button, down) {
+            const mod = currentModule;
+            if (mod && typeof mod._ZAN_WebInjectMouseButton === 'function') {
+              try {
+                mod._ZAN_WebInjectMouseButton(button, down ? 1 : 0);
+                return;
+              } catch (_) {}
+            }
           }
 
           function releaseAllKeys() {
@@ -1138,8 +1152,55 @@
             return { end };
           }
 
-          const fireBtn = installHoldButton(touchFire, SDLK_LCTRL);
-          const useBtn = installHoldButton(touchUse, SDLK_SPACE);
+          function installHoldMouseButton(el, button) {
+            let pointerId = null;
+            let down = false;
+
+            function setDown(next) {
+              down = !!next;
+              try { el.dataset.down = down ? '1' : '0'; } catch (_) {}
+              sendMouseButton(button, down);
+            }
+
+            el.addEventListener('pointerdown', (e) => {
+              if (!isTouch()) return;
+              e.preventDefault();
+              e.stopPropagation();
+              handleUserGesture();
+              pointerId = e.pointerId;
+              try { el.setPointerCapture(pointerId); } catch (_) {}
+              setDown(true);
+            }, { passive: false });
+
+            const end = (e) => {
+              if (pointerId === null) return;
+              if (e && e.pointerId !== pointerId) return;
+              if (e) {
+                try { e.preventDefault(); } catch (_) {}
+                try { e.stopPropagation(); } catch (_) {}
+              }
+              pointerId = null;
+              setDown(false);
+            };
+
+            el.addEventListener('pointerup', end, { passive: false });
+            el.addEventListener('pointercancel', end, { passive: false });
+            el.addEventListener('pointerleave', (e) => {
+              if (pointerId !== null && !el.hasPointerCapture?.(pointerId)) {
+                end(e);
+              }
+            }, { passive: false });
+
+            return { end };
+          }
+
+          // FIRE: prefer Mouse1 (most common +attack binding), fallback to Ctrl.
+          const fireBtn = (currentModule && typeof currentModule._ZAN_WebInjectMouseButton === 'function')
+            ? installHoldMouseButton(touchFire, SDL_BUTTON_LEFT)
+            : installHoldButton(touchFire, SDLK_LCTRL);
+
+          // USE: map to 'E' (Space is commonly jump on modern configs).
+          const useBtn = installHoldButton(touchUse, SDLK_E);
           const mapBtn = installHoldButton(touchMap, SDLK_TAB);
           const spaceBtn = installHoldButton(touchSpacebar, SDLK_SPACE);
 

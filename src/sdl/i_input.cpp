@@ -59,6 +59,19 @@ extern "C" {
 		SDL_PushEvent(&ev);
 	}
 
+	// Web UI helper: allow JS to inject SDL mouse button events (e.g. FIRE as Mouse1).
+	extern "C" EMSCRIPTEN_KEEPALIVE void ZAN_WebInjectMouseButton(int sdlButton, int isDown)
+	{
+		SDL_Event ev;
+		memset(&ev, 0, sizeof(ev));
+		ev.type = isDown ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
+		ev.button.state = isDown ? SDL_PRESSED : SDL_RELEASED;
+		ev.button.button = (Uint8)sdlButton;
+		ev.button.x = 0;
+		ev.button.y = 0;
+		SDL_PushEvent(&ev);
+	}
+
 	// When enabled, ignore physical mouse movement (used to debug touch controls on desktop).
 	extern "C" EMSCRIPTEN_KEEPALIVE void ZAN_WebSetIgnorePhysicalMouse(int ignore)
 	{
