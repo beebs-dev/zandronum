@@ -199,6 +199,66 @@ CVAR( Bool, cl_keepserversettings, false, CVAR_ARCHIVE | CVAR_DEBUGONLY )
 // [JS] Always makes us ready when we are in intermission.
 CVAR( Bool, cl_autoready, false, CVAR_ARCHIVE )
 
+#ifdef __EMSCRIPTEN__
+// Web/WASM client: once the client finishes loading and enters the game, request
+// to join automatically (i.e. leave spectator mode and spawn in).
+//
+// Servers may still deny or queue the request depending on their rules.
+CVAR( Bool, cl_web_autojoin, true, CVAR_GLOBALCONFIG | CVAR_ARCHIVE )
+#endif
+
+#ifdef __EMSCRIPTEN__
+static bool g_bWebAutoJoinPending = false;
+static bool g_bWebAutoJoinIssued = false;
+
+static void CLIENT_WebAutoJoinReset( void )
+{
+	g_bWebAutoJoinPending = false;
+	g_bWebAutoJoinIssued = false;
+}
+
+static void CLIENT_WebAutoJoinArm( void )
+{
+	if ( cl_web_autojoin )
+		g_bWebAutoJoinPending = true;
+}
+
+static void CLIENT_WebAutoJoinTick( void )
+{
+	if ( cl_web_autojoin == false )
+		return;
+	if (( g_bWebAutoJoinPending == false ) || g_bWebAutoJoinIssued )
+		return;
+	if ( NETWORK_GetState( ) != NETSTATE_CLIENT )
+		return;
+	if ( CLIENT_GetConnectionState( ) != CTS_ACTIVE )
+		return;
+	if ( gamestate != GS_LEVEL )
+		return;
+
+	// If we're already in the game (non-spectator), treat it as done.
+	if ( players[consoleplayer].bSpectating == false )
+	{
+		g_bWebAutoJoinPending = false;
+		g_bWebAutoJoinIssued = true;
+		return;
+	}
+
+	// Don't attempt to join during demo playback.
+	if ( CLIENTDEMO_IsPlaying( ) == true )
+	{
+		g_bWebAutoJoinPending = false;
+		g_bWebAutoJoinIssued = true;
+		return;
+	}
+
+	UCVarValue Val = cl_joinpassword.GetGenericRep( CVAR_String );
+	CLIENTCOMMANDS_RequestJoin( Val.String );
+	g_bWebAutoJoinPending = false;
+	g_bWebAutoJoinIssued = true;
+}
+#endif
+
 #ifdef DORCH_SPECTATOR
 // When enabled, the client will automatically spectate after connecting and
 // periodically write a screenshot to a fixed path (/screenshot.png).
@@ -1476,6 +1536,10 @@ void CLIENT_Tick( void )
 #ifdef DORCH_SPECTATOR
 	DORCH_SpectatorTick( );
 #endif
+
+#ifdef __EMSCRIPTEN__
+	CLIENT_WebAutoJoinTick( );
+#endif
 }
 
 //*****************************************************************************
@@ -1522,6 +1586,15 @@ void CLIENT_SetConnectionState( CONNECTIONSTATE_e State )
 	UCVarValue	Val;
 
 	g_ConnectionState = State;
+
+#ifdef __EMSCRIPTEN__
+	// Reset/arm auto-join based on connection lifecycle.
+	if (( g_ConnectionState == CTS_DISCONNECTED ) || ( g_ConnectionState == CTS_ATTEMPTINGCONNECTION ))
+		CLIENT_WebAutoJoinReset( );
+	else if ( g_ConnectionState == CTS_ACTIVE )
+		CLIENT_WebAutoJoinArm( );
+#endif
+
 	switch ( g_ConnectionState )
 	{
 	case CTS_RECEIVINGSNAPSHOT:
