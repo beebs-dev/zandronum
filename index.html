@@ -850,6 +850,22 @@
         // Give input handlers access to the module instance (for resuming SDL audio).
         currentModule = zand;
 
+        // Best-effort graceful disconnect when the tab/page is closed or navigated away.
+        // We use pagehide (not unload) so it also fires for bfcache navigations.
+        // NOTE: This must be synchronous and fast.
+        let didSendDisconnect = false;
+        function trySendDisconnect(reason) {
+          if (didSendDisconnect) return;
+          didSendDisconnect = true;
+          try {
+            const fn = zand && (zand._ZAN_WebDisconnect || zand._zan_web_disconnect);
+            if (typeof fn === 'function') fn();
+          } catch (e) {
+            if (debugEnabled) console.warn('disconnect failed:', reason, e);
+          }
+        }
+        window.addEventListener('pagehide', () => trySendDisconnect('pagehide'), { capture: true });
+
         // Write downloaded IWAD/PWAD bytes into the Emscripten FS.
         // Doing this here (instead of preRun) avoids relying on a global FS binding.
         try {

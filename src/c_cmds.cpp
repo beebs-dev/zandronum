@@ -180,8 +180,14 @@ CCMD (quit)
 
 	if (!insave)
 	{
+		#if defined(__EMSCRIPTEN__)
+		// In the web client, we need to tell the game server we are leaving
+		// before we navigate away.
+		if (NETWORK_GetState() == NETSTATE_CLIENT)
+			CLIENT_QuitNetworkGame(NULL);
+		WEB_NavigateToGamePageFromQueryParamG_Delayed(100);
+		#else
 		WEB_NavigateToGamePageFromQueryParamG();
-		#if !defined(__EMSCRIPTEN__)
 		exit (0);
 		#endif
 	}
@@ -195,8 +201,12 @@ CCMD (exit)
 
 	if (!insave)
 	{
+		#if defined(__EMSCRIPTEN__)
+		if (NETWORK_GetState() == NETSTATE_CLIENT)
+			CLIENT_QuitNetworkGame(NULL);
+		WEB_NavigateToGamePageFromQueryParamG_Delayed(100);
+		#else
 		WEB_NavigateToGamePageFromQueryParamG();
-		#if !defined(__EMSCRIPTEN__)
 		exit (0);
 		#endif
 	}

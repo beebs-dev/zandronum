@@ -46,6 +46,11 @@
 
 #include "web/quit_redirect.h"
 
+#if defined(__EMSCRIPTEN__)
+#include "network.h"
+#include "cl_main.h"
+#endif
+
 // MACROS ------------------------------------------------------------------
 
 // TYPES -------------------------------------------------------------------
@@ -352,8 +357,12 @@ bool FTTYStartupScreen::NetLoop(bool (*timer_callback)(void *), void *userdata)
 void ST_Endoom()
 {
 	I_ShutdownJoysticks();
+	#if defined(__EMSCRIPTEN__)
+	if (NETWORK_GetState() == NETSTATE_CLIENT)
+		CLIENT_QuitNetworkGame(NULL);
+	WEB_NavigateToGamePageFromQueryParamG_Delayed(100);
+	#else
 	WEB_NavigateToGamePageFromQueryParamG();
-	#if !defined(__EMSCRIPTEN__)
 	exit(0);
 	#endif
 }

@@ -53,6 +53,14 @@
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include "cl_main.h"
+#include "network.h"
+
+extern "C" EMSCRIPTEN_KEEPALIVE void ZAN_WebDisconnect(void)
+{
+	// Best-effort graceful disconnect for the web client.
+	if (NETWORK_GetState() == NETSTATE_CLIENT)
+		CLIENT_QuitNetworkGame(NULL);
+}
 
 EM_JS(void, zan_webrtc_udp_send, (const unsigned char* data, int len, int reliable), {
 	if (!Module.__zanRtc || typeof Module.__zanRtc.sendUdp !== 'function') return;
