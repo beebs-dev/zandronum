@@ -1,5 +1,9 @@
 #include <SDL_joystick.h>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+#endif
+
 #include "doomdef.h"
 #include "templates.h"
 #include "m_joy.h"
@@ -264,6 +268,38 @@ protected:
 };
 static SDLInputJoystickManager *JoystickManager;
 
+#ifdef __EMSCRIPTEN__
+// Virtual joystick axes provided by the web UI.
+// Values are in the same space as I_GetAxes() outputs: typically [-1, 1].
+static float zan_web_virtual_axes[NUM_JOYAXIS] = { 0 };
+
+extern "C" EMSCRIPTEN_KEEPALIVE void ZAN_WebSetVirtualJoyAxes(float stickX, float stickY)
+{
+	// stickX: right positive
+	// stickY: down positive (screen space)
+	// Match the sign convention used by SDLInputJoystick::AddAxes(), which subtracts
+	// raw SDL axis values. SDL Y up is typically negative, so forward ends up positive.
+	stickX = clamp<float>(stickX, -1.f, 1.f);
+	stickY = clamp<float>(stickY, -1.f, 1.f);
+
+	zan_web_virtual_axes[JOYAXIS_Yaw] = -stickX;
+	zan_web_virtual_axes[JOYAXIS_Forward] = -stickY;
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE void ZAN_WebClearVirtualJoyAxes()
+{
+	for (int i = 0; i < NUM_JOYAXIS; ++i)
+	{
+		zan_web_virtual_axes[i] = 0;
+	}
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE void ZAN_WebSetUseJoystick(int enabled)
+{
+	use_joystick = (enabled != 0);
+}
+#endif
+
 void I_StartupJoysticks()
 {
 	JoystickManager = new SDLInputJoystickManager();
@@ -286,6 +322,13 @@ void I_GetAxes(float axes[NUM_JOYAXIS])
 	{
 		axes[i] = 0;
 	}
+
+#ifdef __EMSCRIPTEN__
+	for (int i = 0; i < NUM_JOYAXIS; ++i)
+	{
+		axes[i] += zan_web_virtual_axes[i];
+	}
+#endif
 	if (use_joystick)
 	{
 		JoystickManager->AddAxes(axes);

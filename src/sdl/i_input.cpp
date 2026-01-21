@@ -13,6 +13,7 @@
 #include "d_gui.h"
 #include "c_console.h"
 #ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
 // Emscripten's SDL compatibility layer declares some older SDL 1.x APIs but
 // does not always provide implementations. Provide minimal fallbacks.
@@ -26,14 +27,45 @@ extern "C" {
 	static bool zan_mousemove_installed = false;
 	static int zan_rel_x = 0;
 	static int zan_rel_y = 0;
+	static bool zan_ignore_physical_mouse = false;
 
 	static EM_BOOL zan_mousemove_cb(int /*eventType*/, const EmscriptenMouseEvent *e, void * /*userData*/)
 	{
 		if (!e) return EM_FALSE;
+		if (zan_ignore_physical_mouse) return EM_FALSE;
 		// movementX/movementY are populated when pointer lock is active.
 		zan_rel_x += (int)e->movementX;
 		zan_rel_y += (int)e->movementY;
 		return EM_FALSE;
+	}
+
+	// Web UI helper: allow JS to inject relative mouse motion (e.g. virtual joystick turning).
+	extern "C" EMSCRIPTEN_KEEPALIVE void ZAN_WebAddRelativeMouse(int dx, int dy)
+	{
+		zan_rel_x += dx;
+		zan_rel_y += dy;
+	}
+
+	// Web UI helper: allow JS to inject SDL key events (e.g. virtual buttons).
+	extern "C" EMSCRIPTEN_KEEPALIVE void ZAN_WebInjectKey(int sdlSym, int isDown)
+	{
+		SDL_Event ev;
+		memset(&ev, 0, sizeof(ev));
+		ev.type = isDown ? SDL_KEYDOWN : SDL_KEYUP;
+		ev.key.state = isDown ? SDL_PRESSED : SDL_RELEASED;
+		ev.key.keysym.sym = (SDLKey)sdlSym;
+		ev.key.keysym.mod = KMOD_NONE;
+		ev.key.keysym.unicode = 0;
+		SDL_PushEvent(&ev);
+	}
+
+	// When enabled, ignore physical mouse movement (used to debug touch controls on desktop).
+	extern "C" EMSCRIPTEN_KEEPALIVE void ZAN_WebSetIgnorePhysicalMouse(int ignore)
+	{
+		zan_ignore_physical_mouse = (ignore != 0);
+		// Clear any accumulated deltas to avoid a sudden jump.
+		zan_rel_x = 0;
+		zan_rel_y = 0;
 	}
 
 	static void zan_ensure_mousemove_installed()

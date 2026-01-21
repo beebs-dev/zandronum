@@ -14,6 +14,176 @@
         overflow: hidden;
         background: #000;
       }
+
+      /* Touch UI overlay (enabled when isTouch() is true). */
+      #touch-layer {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        pointer-events: none;
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: none;
+      }
+
+      #touch-layer[data-visible='0'] {
+        display: none;
+      }
+
+      #touch-joystick {
+        position: fixed;
+        left: 24px;
+        bottom: 24px;
+        width: clamp(140px, 22vmin, 220px);
+        height: clamp(140px, 22vmin, 220px);
+        border-radius: 999px;
+        pointer-events: auto;
+        background: rgba(255, 255, 255, 0.06);
+        border: 2px solid rgba(255, 255, 255, 0.18);
+        box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+        touch-action: none;
+      }
+
+      #touch-joystick::after {
+        content: '';
+        position: absolute;
+        inset: 50% auto auto 50%;
+        width: 46%;
+        height: 46%;
+        transform: translate(-50%, -50%);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 2px solid rgba(255, 255, 255, 0.18);
+        box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.35);
+        opacity: 0.3;
+      }
+
+      #touch-joystick-knob {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 46%;
+        height: 46%;
+        transform: translate(-50%, -50%);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.18);
+        border: 2px solid rgba(255, 255, 255, 0.28);
+        box-shadow:
+          0 12px 24px rgba(0, 0, 0, 0.55),
+          inset 0 2px 10px rgba(0, 0, 0, 0.35);
+        transition: transform 90ms ease;
+        will-change: transform;
+      }
+
+      #touch-actions {
+        position: fixed;
+        right: 24px;
+        bottom: 24px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr 1fr;
+        gap: 14px;
+        width: calc(clamp(120px, 20vmin, 210px) * 2 + 14px);
+        height: calc(clamp(120px, 20vmin, 210px) * 2 + 14px);
+        pointer-events: none;
+        touch-action: none;
+      }
+
+      .touch-btn {
+        width: clamp(120px, 20vmin, 210px);
+        height: clamp(120px, 20vmin, 210px);
+        border-radius: 22px;
+        border: 2px solid rgba(255, 255, 255, 0.18);
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.55);
+        pointer-events: auto;
+        touch-action: none;
+        display: grid;
+        place-items: center;
+        font: 700 14px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        letter-spacing: 0.06em;
+        color: rgba(255, 255, 255, 0.9);
+        text-transform: uppercase;
+      }
+
+      .touch-btn:active,
+      .touch-btn[data-down='1'] {
+        transform: translateY(1px) scale(0.99);
+        filter: brightness(1.05);
+      }
+
+      #touch-fire {
+        grid-column: 1;
+        grid-row: 2;
+        background: rgba(255, 0, 64, 0.28);
+        border-color: rgba(255, 64, 96, 0.34);
+      }
+
+      #touch-use {
+        grid-column: 2;
+        grid-row: 1;
+        background: rgba(64, 128, 255, 0.22);
+        border-color: rgba(128, 170, 255, 0.34);
+      }
+
+      #touch-topleft {
+        position: fixed;
+        left: 14px;
+        top: 14px;
+        display: flex;
+        gap: 10px;
+        z-index: 21;
+        pointer-events: none;
+      }
+
+      .touch-btn-sm {
+        pointer-events: auto;
+        touch-action: none;
+        height: 44px;
+        min-width: 88px;
+        padding: 0 14px;
+        border-radius: 12px;
+        border: 2px solid rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.92);
+        font: 700 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        display: grid;
+        place-items: center;
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.45);
+      }
+
+      #touch-spacebar {
+        position: fixed;
+        left: 50%;
+        bottom: 16px;
+        transform: translateX(-50%);
+        width: clamp(220px, 42vw, 560px);
+        height: 58px;
+        border-radius: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.92);
+        font: 800 13px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        display: grid;
+        place-items: center;
+        pointer-events: auto;
+        touch-action: none;
+        box-shadow: 0 12px 22px rgba(0, 0, 0, 0.55);
+      }
+
+      #touch-spacebar[data-down='1'] {
+        transform: translateX(-50%) translateY(1px) scale(0.995);
+        filter: brightness(1.05);
+      }
+
+      /* Slightly smaller on narrow screens */
+      @media (max-width: 520px) {
+        #touch-joystick { left: 14px; bottom: 14px; }
+        #touch-actions { right: 14px; bottom: 14px; gap: 12px; }
+      }
       #canvas {
         display: block;
         position: fixed;
@@ -182,6 +352,22 @@
 
   <body>
     <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+    <div id="touch-layer" data-visible="0" aria-hidden="true">
+      <div id="touch-topleft">
+        <div id="touch-menu" class="touch-btn-sm" data-down="0">MENU</div>
+        <div id="touch-map" class="touch-btn-sm" data-down="0">MAP</div>
+      </div>
+      <div id="touch-joystick">
+        <div id="touch-joystick-knob"></div>
+      </div>
+      <div id="touch-actions">
+        <div></div>
+        <div id="touch-use" class="touch-btn" data-down="0">USE</div>
+        <div id="touch-fire" class="touch-btn" data-down="0">FIRE</div>
+        <div></div>
+      </div>
+      <div id="touch-spacebar" data-down="0">SPACE</div>
+    </div>
     <div id="loading-bg">
       <div id="loading-underlay" aria-hidden="true">
         <img class="underlay-sprite" data-base="-2304" src="./static/emerald-7.png" alt="" />
@@ -232,6 +418,14 @@
     <script>
       const hud = document.getElementById('hud');
       const canvas = document.getElementById('canvas');
+      const touchLayer = document.getElementById('touch-layer');
+      const touchJoystick = document.getElementById('touch-joystick');
+      const touchJoystickKnob = document.getElementById('touch-joystick-knob');
+      const touchFire = document.getElementById('touch-fire');
+      const touchUse = document.getElementById('touch-use');
+      const touchMenu = document.getElementById('touch-menu');
+      const touchMap = document.getElementById('touch-map');
+      const touchSpacebar = document.getElementById('touch-spacebar');
       const fmodCredit = document.getElementById('fmod-credit');
       const splash = document.getElementById('splash');
       const loadingBg = document.getElementById('loading-bg');
@@ -245,6 +439,20 @@
       let bgAnimTimer = 0;
       let bgPanRaf = 0;
       let bgPanStart = 0;
+
+      // Touch detection (debugTouch forces touch UI on for desktop debugging).
+      const debugTouch = (() => {
+        try {
+          const u = new URL(window.location.href);
+          return u.searchParams.get('debugtouch') === '1';
+        } catch {
+          return false;
+        }
+      })();
+      if (debugTouch) {
+        console.log('debugtouch=1: forcing touch UI enabled');
+      }
+      const isTouch = () => debugTouch || navigator.maxTouchPoints > 0;
 
       function updateBgPan(ts) {
         try {
@@ -637,6 +845,39 @@
         let inputHandlersInstalled = false;
         let currentModule = null;
 
+        // Shared: call this from canvas clicks OR touch UI controls.
+        async function handleUserGesture() {
+          try {
+            canvas.focus?.();
+          } catch (_) {}
+
+          // Pointer lock for mouse capture (desktop). Ignore failures on mobile.
+          try {
+            if (!debugTouch && !document.pointerLockElement && canvas.requestPointerLock) {
+              canvas.requestPointerLock();
+            }
+          } catch (_) {}
+
+          // LiveKit audio (optional).
+          try {
+            await room.startAudio?.();
+          } catch (_) {}
+
+          // SDL/WebAudio (Emscripten): best-effort resume.
+          try {
+            const mod = currentModule;
+            const ctx = mod?.SDL2?.audioContext || mod?.SDL?.audioContext || window.SDL2?.audioContext;
+            if (ctx && ctx.state === 'suspended' && typeof ctx.resume === 'function') {
+              await ctx.resume();
+            }
+          } catch (_) {}
+
+          if (resolveFirstGesture) {
+            try { resolveFirstGesture(); } catch (_) {}
+            resolveFirstGesture = null;
+          }
+        }
+
         function updatePointerLockUi() {
           const locked = document.pointerLockElement === canvas;
           canvas.style.cursor = locked ? 'none' : 'default';
@@ -650,43 +891,299 @@
           updatePointerLockUi();
 
           const handler = async () => {
-            try {
-              canvas.focus?.();
-            } catch (_) {}
-
-            // Pointer lock for mouse capture.
-            try {
-              if (!document.pointerLockElement && canvas.requestPointerLock) {
-                canvas.requestPointerLock();
-              }
-            } catch (_) {}
-
-            // LiveKit audio (optional).
-            try {
-              await room.startAudio?.();
-            } catch (_) {}
-
-            // SDL/WebAudio (Emscripten): best-effort resume.
-            try {
-              const mod = currentModule;
-              const ctx = mod?.SDL2?.audioContext || mod?.SDL?.audioContext || window.SDL2?.audioContext;
-              if (ctx && ctx.state === 'suspended' && typeof ctx.resume === 'function') {
-                await ctx.resume();
-              }
-            } catch (_) {}
-
-            if (resolveFirstGesture) {
-              try { resolveFirstGesture(); } catch (_) {}
-              resolveFirstGesture = null;
-            }
+            await handleUserGesture();
           };
 
           // Not once: we need to re-acquire pointer lock after tab blur.
           canvas.addEventListener('pointerdown', handler);
         }
 
+        function installTouchControls() {
+          if (!touchLayer || !touchJoystick || !touchJoystickKnob || !touchFire || !touchUse || !touchMenu || !touchMap || !touchSpacebar) return;
+
+          function setTouchVisible(visible) {
+            try {
+              touchLayer.dataset.visible = visible ? '1' : '0';
+            } catch (_) {}
+          }
+
+          setTouchVisible(isTouch());
+
+          // In debug-touch mode, make mouse movement not affect look.
+          try {
+            if (debugTouch) {
+              console.log('debugtouch=1: disabling physical mouse-look (joystick-only look)');
+            }
+          } catch (_) {}
+
+          // SDL 1.2 key symbols (stable numeric values).
+          const SDLK_LEFT = 276;
+          const SDLK_RIGHT = 275;
+          const SDLK_UP = 273;
+          const SDLK_DOWN = 274;
+          const SDLK_LCTRL = 306;
+          const SDLK_SPACE = 32;
+          const SDLK_ESCAPE = 27;
+          const SDLK_TAB = 9;
+
+          const keyDownState = new Map();
+
+          function sendKey(sym, down) {
+            const mod = currentModule;
+            const prev = !!keyDownState.get(sym);
+            if (prev === !!down) return;
+            keyDownState.set(sym, !!down);
+
+            // Prefer native injection into SDL event queue.
+            if (mod && typeof mod._ZAN_WebInjectKey === 'function') {
+              try {
+                mod._ZAN_WebInjectKey(sym, down ? 1 : 0);
+                return;
+              } catch (_) {}
+            }
+
+            // Fallback: dispatch DOM key events (best-effort).
+            try {
+              const type = down ? 'keydown' : 'keyup';
+              const ev = new KeyboardEvent(type, { bubbles: true, cancelable: true });
+              canvas.dispatchEvent(ev);
+              document.dispatchEvent(ev);
+            } catch (_) {}
+          }
+
+          function releaseAllKeys() {
+            for (const [sym, down] of keyDownState.entries()) {
+              if (down) {
+                sendKey(sym, false);
+              }
+            }
+          }
+
+          function tapKey(sym) {
+            sendKey(sym, true);
+            window.setTimeout(() => sendKey(sym, false), 40);
+          }
+
+          // --- Joystick: smooth virtual joystick axes (Yaw + Forward) ---
+          let joyPointerId = null;
+          let joyActive = false;
+          let joyX = 0;
+          let joyY = 0;
+          let joyBaseRect = null;
+
+          function setVirtualJoy(x, y) {
+            const mod = currentModule;
+            if (!mod) return;
+
+            // In debugTouch mode, ignore physical mouse so only joystick controls yaw.
+            try {
+              if (debugTouch && typeof mod._ZAN_WebSetIgnorePhysicalMouse === 'function') {
+                mod._ZAN_WebSetIgnorePhysicalMouse(1);
+              }
+            } catch (_) {}
+
+            // Ensure joystick input path is enabled.
+            try {
+              if (typeof mod._ZAN_WebSetUseJoystick === 'function') {
+                mod._ZAN_WebSetUseJoystick(1);
+              }
+            } catch (_) {}
+
+            try {
+              if (typeof mod._ZAN_WebSetVirtualJoyAxes === 'function') {
+                mod._ZAN_WebSetVirtualJoyAxes(x, y);
+                return;
+              }
+            } catch (_) {}
+
+            // Fallbacks: if the virtual joystick export isn't present, degrade to keys.
+            const dead = 0.22;
+            sendKey(SDLK_UP, y < -dead);
+            sendKey(SDLK_DOWN, y > dead);
+            sendKey(SDLK_LEFT, x < -dead);
+            sendKey(SDLK_RIGHT, x > dead);
+          }
+
+          function updateKnob() {
+            if (!joyBaseRect) {
+              try { joyBaseRect = touchJoystick.getBoundingClientRect(); } catch (_) {}
+            }
+            const rect = joyBaseRect;
+            if (!rect) return;
+
+            const radius = Math.min(rect.width, rect.height) * 0.34;
+            const px = joyX * radius;
+            const py = joyY * radius;
+            touchJoystickKnob.style.transform = `translate(calc(-50% + ${px.toFixed(1)}px), calc(-50% + ${py.toFixed(1)}px))`;
+          }
+
+          function computeJoyFromClient(clientX, clientY) {
+            if (!joyBaseRect) {
+              try { joyBaseRect = touchJoystick.getBoundingClientRect(); } catch (_) {}
+            }
+            const rect = joyBaseRect;
+            if (!rect) return { x: 0, y: 0 };
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            const dx = clientX - cx;
+            const dy = clientY - cy;
+            const maxR = Math.min(rect.width, rect.height) * 0.42;
+            const len = Math.hypot(dx, dy) || 1;
+            const clamped = Math.min(len, maxR);
+            const nx = (dx / len) * (clamped / maxR);
+            const ny = (dy / len) * (clamped / maxR);
+            return { x: nx, y: ny };
+          }
+
+          function joystickEnd() {
+            joyActive = false;
+            joyPointerId = null;
+            joyX = 0;
+            joyY = 0;
+            joyBaseRect = null;
+            try {
+              touchJoystickKnob.style.transform = 'translate(-50%, -50%)';
+            } catch (_) {}
+            try {
+              const mod = currentModule;
+              if (mod && typeof mod._ZAN_WebClearVirtualJoyAxes === 'function') {
+                mod._ZAN_WebClearVirtualJoyAxes();
+              }
+            } catch (_) {}
+            setVirtualJoy(0, 0);
+          }
+
+          touchJoystick.addEventListener('pointerdown', (e) => {
+            if (!isTouch()) return;
+            e.preventDefault();
+            e.stopPropagation();
+            handleUserGesture();
+            try { touchJoystick.setPointerCapture(e.pointerId); } catch (_) {}
+            joyPointerId = e.pointerId;
+            joyActive = true;
+            joyBaseRect = null;
+            const v = computeJoyFromClient(e.clientX, e.clientY);
+            joyX = v.x;
+            joyY = v.y;
+            updateKnob();
+            setVirtualJoy(joyX, joyY);
+          }, { passive: false });
+
+          touchJoystick.addEventListener('pointermove', (e) => {
+            if (!joyActive || e.pointerId !== joyPointerId) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const v = computeJoyFromClient(e.clientX, e.clientY);
+            joyX = v.x;
+            joyY = v.y;
+            updateKnob();
+            setVirtualJoy(joyX, joyY);
+          }, { passive: false });
+
+          touchJoystick.addEventListener('pointerup', (e) => {
+            if (e.pointerId !== joyPointerId) return;
+            e.preventDefault();
+            e.stopPropagation();
+            joystickEnd();
+          }, { passive: false });
+
+          touchJoystick.addEventListener('pointercancel', (e) => {
+            if (e.pointerId !== joyPointerId) return;
+            e.preventDefault();
+            e.stopPropagation();
+            joystickEnd();
+          }, { passive: false });
+
+          // --- Action buttons ---
+          function installHoldButton(el, keySym, labelEl) {
+            let pointerId = null;
+            let down = false;
+
+            function setDown(next) {
+              down = !!next;
+              try { el.dataset.down = down ? '1' : '0'; } catch (_) {}
+              sendKey(keySym, down);
+            }
+
+            el.addEventListener('pointerdown', (e) => {
+              if (!isTouch()) return;
+              e.preventDefault();
+              e.stopPropagation();
+              handleUserGesture();
+              pointerId = e.pointerId;
+              try { el.setPointerCapture(pointerId); } catch (_) {}
+              setDown(true);
+            }, { passive: false });
+
+            const end = (e) => {
+              if (pointerId === null) return;
+              if (e && e.pointerId !== pointerId) return;
+              if (e) {
+                try { e.preventDefault(); } catch (_) {}
+                try { e.stopPropagation(); } catch (_) {}
+              }
+              pointerId = null;
+              setDown(false);
+            };
+
+            el.addEventListener('pointerup', end, { passive: false });
+            el.addEventListener('pointercancel', end, { passive: false });
+            el.addEventListener('pointerleave', (e) => {
+              // If pointer capture isn't supported, leaving should cancel hold.
+              if (pointerId !== null && !el.hasPointerCapture?.(pointerId)) {
+                end(e);
+              }
+            }, { passive: false });
+
+            return { end };
+          }
+
+          const fireBtn = installHoldButton(touchFire, SDLK_LCTRL);
+          const useBtn = installHoldButton(touchUse, SDLK_SPACE);
+          const mapBtn = installHoldButton(touchMap, SDLK_TAB);
+          const spaceBtn = installHoldButton(touchSpacebar, SDLK_SPACE);
+
+          // Menu is a tap (ESC down+up).
+          touchMenu.addEventListener('pointerdown', (e) => {
+            if (!isTouch()) return;
+            e.preventDefault();
+            e.stopPropagation();
+            handleUserGesture();
+            try { touchMenu.dataset.down = '1'; } catch (_) {}
+            tapKey(SDLK_ESCAPE);
+            window.setTimeout(() => {
+              try { touchMenu.dataset.down = '0'; } catch (_) {}
+            }, 90);
+          }, { passive: false });
+
+          // Cleanup: avoid stuck keys if the tab loses focus.
+          window.addEventListener('blur', () => {
+            joystickEnd();
+            fireBtn.end();
+            useBtn.end();
+            mapBtn.end();
+            spaceBtn.end();
+            releaseAllKeys();
+          });
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState !== 'visible') {
+              joystickEnd();
+              fireBtn.end();
+              useBtn.end();
+              mapBtn.end();
+              spaceBtn.end();
+              releaseAllKeys();
+            }
+          });
+
+          // If the user flips debugTouch later, reflect it on resize.
+          window.addEventListener('resize', () => setTouchVisible(isTouch()));
+          window.addEventListener('orientationchange', () => setTouchVisible(isTouch()));
+        }
+
         // Install early so LiveKit connect is always gated.
         installInputHandlers();
+        installTouchControls();
 
         // UDP queue for the WASM side to poll.
         const udpQueue = [];
@@ -849,6 +1346,16 @@
 
         // Give input handlers access to the module instance (for resuming SDL audio).
         currentModule = zand;
+
+        // If we're debugging touch controls on desktop, make sure physical mouse movement
+        // never affects view angle. Touch joystick controls yaw via virtual joy axes.
+        if (debugTouch) {
+          try {
+            if (typeof zand._ZAN_WebSetIgnorePhysicalMouse === 'function') {
+              zand._ZAN_WebSetIgnorePhysicalMouse(1);
+            }
+          } catch (_) {}
+        }
 
         // Best-effort graceful disconnect when the tab/page is closed or navigated away.
         // We use pagehide (not unload) so it also fires for bfcache navigations.

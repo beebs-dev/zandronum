@@ -1538,10 +1538,11 @@ if( EMSCRIPTEN )
 	)
 
 	# Emscripten link flags.
-	target_link_options( zdoom PRIVATE
+		target_link_options( zdoom PRIVATE
 		"-sUSE_SDL=1"
 		"-sALLOW_MEMORY_GROWTH=1"
 		"-sFORCE_FILESYSTEM=1"
+		"-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_ZAN_WebDisconnect','_ZAN_WebInjectKey','_ZAN_WebAddRelativeMouse','_ZAN_WebSetVirtualJoyAxes','_ZAN_WebClearVirtualJoyAxes','_ZAN_WebSetUseJoystick','_ZAN_WebSetIgnorePhysicalMouse']"
 		"-sEXPORTED_RUNTIME_METHODS=['callMain','FS','ccall','cwrap','setValue','getValue']"
 		"-sMODULARIZE=1"
 		"-sEXPORT_NAME=createZandronumModule"
