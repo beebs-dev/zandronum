@@ -205,6 +205,11 @@ CVAR( Bool, cl_autoready, false, CVAR_ARCHIVE )
 CVAR( Bool, dorch_spectator_enable, true, CVAR_GLOBALCONFIG | CVAR_ARCHIVE )
 CVAR( Int, dorch_spectator_interval_tics, 30 * TICRATE, CVAR_GLOBALCONFIG | CVAR_ARCHIVE )
 CVAR( Int, dorch_spectator_shot_delay_tics, 5, CVAR_GLOBALCONFIG | CVAR_ARCHIVE )
+
+// When enabled, and there are no non-spectator players connected, the client
+// will "show off" the map by teleporting its camera to random monster/item
+// locations every 5 seconds.
+CVAR( Bool, dorch_spectator_roam_enable, true, CVAR_GLOBALCONFIG | CVAR_ARCHIVE )
 #endif
 
 #ifdef ENABLE_AUTH_STORAGE
@@ -593,6 +598,9 @@ static int g_iDorchSpectatorPendingShotTic = -1;
 static char g_szDorchSpectatorShotPathFinal[] = "/screenshot.png";
 static char g_szDorchSpectatorShotPathTmp[] = "/screenshot.png.tmp";
 
+static int g_iDorchSpectatorNextRoamTic = 0;
+static AActor *g_pDorchSpectatorRoamCamera = NULL;
+
 static void DORCH_WriteSpectatorScreenshot( void )
 {
 	// Write to a temp path first, then atomically move into place so external
@@ -617,6 +625,123 @@ static void DORCH_WriteSpectatorScreenshot( void )
 	}
 }
 
+static bool DORCH_HasAnyNonSpectatorPlayers( void )
+{
+	for ( int i = 0; i < MAXPLAYERS; ++i )
+	{
+		if ( playeringame[i] == false )
+			continue;
+
+		if ( i == consoleplayer )
+			continue;
+
+		if ( PLAYER_IsTrueSpectator( &players[i] ) )
+			continue;
+
+		if ( players[i].mo == NULL )
+			continue;
+
+		return true;
+	}
+
+	return false;
+}
+
+static AActor *DORCH_PickRandomRoamTarget( void )
+{
+	TArray<AActor *> candidates;
+
+	TThinkerIterator<AActor> iterator;
+	AActor *actor = NULL;
+	while (( actor = iterator.Next( )))
+	{
+		if ( actor->ObjectFlags & OF_EuthanizeMe )
+			continue;
+
+		// Never attach the camera to player pawns.
+		if ( actor->player != NULL )
+			continue;
+
+		// Prefer tangible points of interest.
+		const bool isItem = actor->IsKindOf( RUNTIME_CLASS( AInventory )) && ( actor->flags & MF_SPECIAL );
+		const bool isMonster = ( actor->flags3 & MF3_ISMONSTER ) || ( actor->flags & MF_COUNTKILL );
+
+		if (( isItem == false ) && ( isMonster == false ))
+			continue;
+
+		// Skip dead monsters/corpses.
+		if ( isMonster && ( actor->health <= 0 ))
+			continue;
+
+		candidates.Push( actor );
+	}
+
+	if ( candidates.Size( ) == 0 )
+		return NULL;
+
+	return candidates[ M_Random( ) % candidates.Size( ) ];
+}
+
+static void DORCH_EnsureRoamCamera( void )
+{
+	if (( g_pDorchSpectatorRoamCamera != NULL ) && ( g_pDorchSpectatorRoamCamera->ObjectFlags & OF_EuthanizeMe ))
+		g_pDorchSpectatorRoamCamera = NULL;
+
+	if ( g_pDorchSpectatorRoamCamera != NULL )
+		return;
+
+	if ( players[consoleplayer].mo == NULL )
+		return;
+
+	g_pDorchSpectatorRoamCamera = Spawn( "MovingCamera", players[consoleplayer].mo->x, players[consoleplayer].mo->y, players[consoleplayer].mo->z, ALLOW_REPLACE );
+	if ( g_pDorchSpectatorRoamCamera != NULL )
+	{
+		g_pDorchSpectatorRoamCamera->flags |= MF_NOGRAVITY;
+		g_pDorchSpectatorRoamCamera->renderflags |= RF_INVISIBLE;
+	}
+}
+
+static void DORCH_RoamTick( void )
+{
+	if ( dorch_spectator_roam_enable == false )
+		return;
+
+	// Only roam when nobody is connected to spectate.
+	if ( DORCH_HasAnyNonSpectatorPlayers( ))
+		return;
+
+	// Ensure we're not stuck spying on a disconnected player.
+	C_DoCommand( "spycancel" );
+
+	DORCH_EnsureRoamCamera( );
+	if ( g_pDorchSpectatorRoamCamera == NULL )
+		return;
+
+	// Always render through our roaming camera when idle.
+	players[consoleplayer].camera = g_pDorchSpectatorRoamCamera;
+
+	if ( gametic < g_iDorchSpectatorNextRoamTic )
+		return;
+
+	AActor *target = DORCH_PickRandomRoamTarget( );
+	if ( target == NULL )
+	{
+		g_iDorchSpectatorNextRoamTic = gametic + ( 5 * TICRATE );
+		return;
+	}
+
+	// Put the camera slightly above the target so we don't clip into floors.
+	fixed_t camZ = target->z + target->height + ( 16 * FRACUNIT );
+	P_TeleportMove( g_pDorchSpectatorRoamCamera, target->x, target->y, camZ, false );
+
+	// Randomize view direction a bit to keep things varied.
+	g_pDorchSpectatorRoamCamera->angle = ( static_cast<angle_t>( M_Random( )) << 24 );
+	g_pDorchSpectatorRoamCamera->pitch = 0;
+
+	S_UpdateSounds( g_pDorchSpectatorRoamCamera );
+	g_iDorchSpectatorNextRoamTic = gametic + ( 5 * TICRATE );
+}
+
 static void DORCH_SpectatorTick( void )
 {
 	if ( dorch_spectator_enable == false )
@@ -636,6 +761,7 @@ static void DORCH_SpectatorTick( void )
 		g_bDorchSpectatorInitialized = true;
 		g_iDorchSpectatorNextCycleTic = gametic + TICRATE;
 		g_iDorchSpectatorPendingShotTic = -1;
+		g_iDorchSpectatorNextRoamTic = gametic + ( 5 * TICRATE );
 
 		// Ensure the rendered view is clean (no status bar, no weapon sprites).
 		UCVarValue cleanVal;
@@ -647,6 +773,10 @@ static void DORCH_SpectatorTick( void )
 		CLIENTCOMMANDS_Spectate( );
 		return;
 	}
+
+	// If nobody is connected, roam the map to make the stream more interesting.
+	// This is intentionally independent of the screenshot cadence.
+	DORCH_RoamTick( );
 
 	// Clamp CVARs to reasonable values so we can't accidentally hammer the engine.
 	const int intervalTics = ( dorch_spectator_interval_tics < 1 ) ? 1 : dorch_spectator_interval_tics;
@@ -666,7 +796,9 @@ static void DORCH_SpectatorTick( void )
 	if ( gametic >= g_iDorchSpectatorNextCycleTic )
 	{
 		// Choose a player to spy on (safe now that we're authenticated/active).
-		C_DoCommand( "spyrandom" );
+		// If there are no players, DORCH_RoamTick( ) will keep the view interesting.
+		if ( DORCH_HasAnyNonSpectatorPlayers( ))
+			C_DoCommand( "spyrandom" );
 
 		// Delay a few tics so the view/player change has time to take effect.
 		g_iDorchSpectatorPendingShotTic = gametic + shotDelayTics;
