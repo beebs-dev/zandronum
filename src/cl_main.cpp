@@ -1089,7 +1089,7 @@ static int DORCH_PickNextRoamZoneId( void )
 	return DORCH_WeightedPickZone( any );
 }
 
-static bool DORCH_PickRoamPointFromZone( const int zoneId, const fixed_t minDist, DorchRoamPoint &out )
+static bool DORCH_PickRoamPointFromZone( const int zoneId, const fixed_t minDist, DorchRoamPoint &out, unsigned int &outPointIndex )
 {
 	if (( zoneId < 0 ) || ( zoneId >= static_cast<int>( g_DorchRoamZones.Size( ))))
 		return false;
@@ -1108,14 +1108,46 @@ static bool DORCH_PickRoamPointFromZone( const int zoneId, const fixed_t minDist
 		if ( DORCH_IsTooCloseToLastRoamPosXY( p.x, p.y, minDist ) )
 			continue;
 		out = p;
+		outPointIndex = pick;
 		return true;
 	}
 
-	// Fallback: accept any point in the zone.
-	const unsigned int pick = zone.pointIndices[ M_Random( ) % zone.pointIndices.Size( ) ];
-	if ( pick >= g_DorchRoamPoints.Size( ) )
+	// If we couldn't satisfy minDist in this zone, fail so callers can try other zones.
+	return false;
+}
+
+static int DORCH_FindZoneForPointIndex( const unsigned int pointIndex )
+{
+	for ( unsigned int z = 0; z < g_DorchRoamZones.Size( ); ++z )
+	{
+		for ( unsigned int i = 0; i < g_DorchRoamZones[z].pointIndices.Size( ); ++i )
+		{
+			if ( g_DorchRoamZones[z].pointIndices[i] == pointIndex )
+				return static_cast<int>( z );
+		}
+	}
+	return -1;
+}
+
+static bool DORCH_PickFarthestPointOverall( const fixed_t fromX, const fixed_t fromY, unsigned int &outPointIndex )
+{
+	if ( g_DorchRoamPoints.Size( ) == 0 )
 		return false;
-	out = g_DorchRoamPoints[pick];
+
+	unsigned int bestIdx = 0;
+	int64_t bestDist = -1;
+	for ( unsigned int i = 0; i < g_DorchRoamPoints.Size( ); ++i )
+	{
+		const int64_t dx = static_cast<int64_t>( g_DorchRoamPoints[i].x ) - static_cast<int64_t>( fromX );
+		const int64_t dy = static_cast<int64_t>( g_DorchRoamPoints[i].y ) - static_cast<int64_t>( fromY );
+		const int64_t d = ( dx * dx ) + ( dy * dy );
+		if ( d > bestDist )
+		{
+			bestDist = d;
+			bestIdx = i;
+		}
+	}
+	outPointIndex = bestIdx;
 	return true;
 }
 
@@ -1146,20 +1178,27 @@ static bool DORCH_PickNextRoamLocation( const fixed_t minDist, int &outZoneId, D
 		if ( alreadyTried )
 			continue;
 		triedZones.Push( zid );
-
-		if ( DORCH_PickRoamPointFromZone( zid, minDist, outPoint ) )
+		unsigned int pointIndex = 0;
+		if ( DORCH_PickRoamPointFromZone( zid, minDist, outPoint, pointIndex ) )
 		{
 			outZoneId = zid;
 			return true;
 		}
 	}
 
-	// Final fallback: any zone, any point.
-	outZoneId = ( g_DorchRoamZones.Size( ) > 0 ) ? ( M_Random( ) % static_cast<int>( g_DorchRoamZones.Size( ))) : -1;
-	if ( outZoneId < 0 )
+	// Fallback: pick the farthest point overall from the current camera position.
+	const fixed_t fromX = ( g_pDorchSpectatorRoamCamera != NULL ) ? g_pDorchSpectatorRoamCamera->x : g_DorchSpectatorLastRoamX;
+	const fixed_t fromY = ( g_pDorchSpectatorRoamCamera != NULL ) ? g_pDorchSpectatorRoamCamera->y : g_DorchSpectatorLastRoamY;
+	unsigned int pointIndex = 0;
+	if ( DORCH_PickFarthestPointOverall( fromX, fromY, pointIndex ) == false )
 		return false;
 
-	return DORCH_PickRoamPointFromZone( outZoneId, 0, outPoint );
+	outPoint = g_DorchRoamPoints[pointIndex];
+	outZoneId = DORCH_FindZoneForPointIndex( pointIndex );
+
+	// If even the farthest point is still too close, accept it anyway (map is tiny),
+	// but at least it won't be an arbitrary near-duplicate.
+	return true;
 }
 
 static void DORCH_EnsureRoamCamera( void )
@@ -1208,22 +1247,40 @@ static void DORCH_RoamTick( void )
 	if ( g_bDorchRoamZonesReady == false )
 		DORCH_BuildRoamZones_KMeans( );
 
+	const fixed_t minDist = 512 * FRACUNIT;
+	bool teleported = false;
 	DorchRoamPoint p;
 	int zoneId = -1;
-	const fixed_t minDist = 512 * FRACUNIT;
-	if ( DORCH_PickNextRoamLocation( minDist, zoneId, p ) == false )
+
+	for ( int attempt = 0; attempt < 6; ++attempt )
+	{
+		if ( DORCH_PickNextRoamLocation( minDist, zoneId, p ) == false )
+			break;
+
+		// Try teleporting; if it fails, try a different point.
+		if ( P_TeleportMove( g_pDorchSpectatorRoamCamera, p.x, p.y, p.z, false ) )
+		{
+			teleported = true;
+			break;
+		}
+		if ( P_TeleportMove( g_pDorchSpectatorRoamCamera, p.x, p.y, p.z + ( 64 * FRACUNIT ), false ) )
+		{
+			teleported = true;
+			break;
+		}
+	}
+
+	if ( teleported == false )
 	{
 		g_iDorchSpectatorNextRoamTic = gametic + ( 5 * TICRATE );
 		return;
 	}
 
-	P_TeleportMove( g_pDorchSpectatorRoamCamera, p.x, p.y, p.z, false );
-
 	// Remember where we went so the next selection isn't "nearby".
 	g_bDorchSpectatorHasLastRoamPos = true;
-	g_DorchSpectatorLastRoamX = p.x;
-	g_DorchSpectatorLastRoamY = p.y;
-	g_DorchSpectatorLastRoamZ = p.z;
+	g_DorchSpectatorLastRoamX = g_pDorchSpectatorRoamCamera->x;
+	g_DorchSpectatorLastRoamY = g_pDorchSpectatorRoamCamera->y;
+	g_DorchSpectatorLastRoamZ = g_pDorchSpectatorRoamCamera->z;
 	g_iDorchLastRoamZone = zoneId;
 	DORCH_PushRecentZone( zoneId );
 
