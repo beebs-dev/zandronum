@@ -960,9 +960,11 @@
             if (mod && typeof mod._ZAN_WebInjectMouseButton === 'function') {
               try {
                 mod._ZAN_WebInjectMouseButton(button, down ? 1 : 0);
-                return;
+                return true;
               } catch (_) {}
             }
+
+            return false;
           }
 
           function releaseAllKeys() {
@@ -1159,7 +1161,12 @@
             function setDown(next) {
               down = !!next;
               try { el.dataset.down = down ? '1' : '0'; } catch (_) {}
-              sendMouseButton(button, down);
+
+              // Prefer mouse button injection for +attack. If unavailable (e.g. module not ready),
+              // fall back to the historical Ctrl binding.
+              if (!sendMouseButton(button, down)) {
+                sendKey(SDLK_LCTRL, down);
+              }
             }
 
             el.addEventListener('pointerdown', (e) => {
@@ -1194,10 +1201,8 @@
             return { end };
           }
 
-          // FIRE: prefer Mouse1 (most common +attack binding), fallback to Ctrl.
-          const fireBtn = (currentModule && typeof currentModule._ZAN_WebInjectMouseButton === 'function')
-            ? installHoldMouseButton(touchFire, SDL_BUTTON_LEFT)
-            : installHoldButton(touchFire, SDLK_LCTRL);
+          // FIRE: Mouse1 (most common +attack binding). Fallback handled inside installHoldMouseButton.
+          const fireBtn = installHoldMouseButton(touchFire, SDL_BUTTON_LEFT);
 
           // USE: map to 'E' (Space is commonly jump on modern configs).
           const useBtn = installHoldButton(touchUse, SDLK_E);

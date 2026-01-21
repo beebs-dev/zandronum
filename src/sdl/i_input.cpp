@@ -18,6 +18,8 @@
 // Emscripten's SDL compatibility layer declares some older SDL 1.x APIs but
 // does not always provide implementations. Provide minimal fallbacks.
 extern "C" {
+	extern bool GUICapture;
+
 	void SDL_GetKeyRepeat(int *delay, int *interval)
 	{
 		if (delay) *delay = 0;
@@ -62,6 +64,26 @@ extern "C" {
 	// Web UI helper: allow JS to inject SDL mouse button events (e.g. FIRE as Mouse1).
 	extern "C" EMSCRIPTEN_KEEPALIVE void ZAN_WebInjectMouseButton(int sdlButton, int isDown)
 	{
+		// In-game, route directly to the engine's input events. This avoids cases where
+		// SDL mouse button events get treated as GUI clicks (GUICapture).
+		if (!GUICapture)
+		{
+			event_t ev = { 0,0,0,0,0,0,0 };
+			ev.type = isDown ? EV_KeyDown : EV_KeyUp;
+			switch (sdlButton)
+			{
+			case 1: ev.data1 = KEY_MOUSE1; break;
+			case 2: ev.data1 = KEY_MOUSE3; break;
+			case 3: ev.data1 = KEY_MOUSE2; break;
+			default: ev.data1 = 0; break;
+			}
+			if (ev.data1 != 0)
+			{
+				D_PostEvent(&ev);
+			}
+			return;
+		}
+
 		SDL_Event ev;
 		memset(&ev, 0, sizeof(ev));
 		ev.type = isDown ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
