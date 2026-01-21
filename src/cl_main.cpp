@@ -609,7 +609,49 @@ static bool g_bDorchSpectatorHasLastRoamPos = false;
 static fixed_t g_DorchSpectatorLastRoamX = 0;
 static fixed_t g_DorchSpectatorLastRoamY = 0;
 static fixed_t g_DorchSpectatorLastRoamZ = 0;
-static AActor *g_pDorchSpectatorLastRoamTarget = NULL;
+
+// -----------------------------------------------------------------------------
+// [dorch] Idle roaming zones
+//
+// Goal: When no players are connected, make the spectator jump around the map
+// intentionally. We precompute spatial clusters ("zones") of item/monster
+// locations once per map, then pick a zone first, then a point within that zone.
+//
+// Clustering:
+// - 2D k-means on (x, y) fixed_t coordinates.
+// - K is chosen in [min(n, 8), min(n, 16)] when n>=8, else K=n.
+//
+// Selection rules:
+// - Prefer a zone that is not the same (or adjacent) to the last zone.
+// - Avoid zones used very recently.
+// - Enforce a minimum 2D distance (default 512 units) from the last teleport.
+// - Provide fallbacks if constraints are impossible for sparse maps.
+// -----------------------------------------------------------------------------
+
+struct DorchRoamPoint
+{
+	fixed_t x;
+	fixed_t y;
+	fixed_t z;
+	int interestWeight; // 1 for item, 2 for monster
+};
+
+struct DorchRoamZone
+{
+	fixed_t cx;
+	fixed_t cy;
+	TArray<unsigned int> pointIndices;
+	TArray<unsigned int> adjacentZoneIds; // nearest neighbors by centroid distance
+	int interestScore; // sum of point weights
+};
+
+static bool g_bDorchRoamZonesReady = false;
+static TArray<DorchRoamPoint> g_DorchRoamPoints;
+static TArray<DorchRoamZone> g_DorchRoamZones;
+static int g_iDorchLastRoamZone = -1;
+static int g_iDorchRecentRoamZones[4] = { -1, -1, -1, -1 };
+static int g_iDorchRecentRoamZonesPos = 0;
+static char g_szDorchLastRoamMapName[9] = { 0 };
 
 static void DORCH_WriteSpectatorScreenshot( void )
 {
@@ -657,13 +699,13 @@ static bool DORCH_HasAnyNonSpectatorPlayers( void )
 	return false;
 }
 
-static bool DORCH_IsTooCloseToLastRoamPos( const AActor *actor, const fixed_t minDist )
+static bool DORCH_IsTooCloseToLastRoamPosXY( const fixed_t x, const fixed_t y, const fixed_t minDist )
 {
-	if (( actor == NULL ) || ( g_bDorchSpectatorHasLastRoamPos == false ))
+	if ( g_bDorchSpectatorHasLastRoamPos == false )
 		return false;
 
-	const int64_t dx = static_cast<int64_t>( actor->x ) - static_cast<int64_t>( g_DorchSpectatorLastRoamX );
-	const int64_t dy = static_cast<int64_t>( actor->y ) - static_cast<int64_t>( g_DorchSpectatorLastRoamY );
+	const int64_t dx = static_cast<int64_t>( x ) - static_cast<int64_t>( g_DorchSpectatorLastRoamX );
+	const int64_t dy = static_cast<int64_t>( y ) - static_cast<int64_t>( g_DorchSpectatorLastRoamY );
 	const int64_t minDist64 = static_cast<int64_t>( minDist );
 	const int64_t distSq = ( dx * dx ) + ( dy * dy );
 	const int64_t minDistSq = ( minDist64 * minDist64 );
@@ -718,12 +760,158 @@ static void DORCH_AimRoamCameraTowardOpenSpace( AActor *camera )
 	camera->pitch = 0;
 }
 
-static AActor *DORCH_PickRandomRoamTarget( void )
+static void DORCH_ResetRoamZones( void )
 {
-	TArray<AActor *> candidates;
-	TArray<AActor *> farCandidates;
+	g_bDorchRoamZonesReady = false;
+	g_DorchRoamPoints.Clear( );
+	g_DorchRoamZones.Clear( );
+	g_iDorchLastRoamZone = -1;
+	for ( int i = 0; i < 4; ++i )
+		g_iDorchRecentRoamZones[i] = -1;
+	g_iDorchRecentRoamZonesPos = 0;
+}
 
-	const fixed_t minDist = 512 * FRACUNIT;
+static void DORCH_MaybeResetRoamZonesForMapChange( void )
+{
+	// Map name in this codebase is an 8-character lump name.
+	if ( strncmp( g_szDorchLastRoamMapName, level.mapname, 8 ) != 0 )
+	{
+		strncpy( g_szDorchLastRoamMapName, level.mapname, 8 );
+		g_szDorchLastRoamMapName[8] = '\0';
+		DORCH_ResetRoamZones( );
+		g_bDorchSpectatorHasLastRoamPos = false;
+	}
+}
+
+static bool DORCH_IsRecentZone( const int zoneId )
+{
+	for ( int i = 0; i < 4; ++i )
+	{
+		if ( g_iDorchRecentRoamZones[i] == zoneId )
+			return true;
+	}
+	return false;
+}
+
+static void DORCH_PushRecentZone( const int zoneId )
+{
+	g_iDorchRecentRoamZones[ g_iDorchRecentRoamZonesPos ] = zoneId;
+	g_iDorchRecentRoamZonesPos = ( g_iDorchRecentRoamZonesPos + 1 ) % 4;
+}
+
+static bool DORCH_AreZonesAdjacent( const int a, const int b )
+{
+	if (( a < 0 ) || ( b < 0 ))
+		return false;
+	if (( a >= static_cast<int>( g_DorchRoamZones.Size( ))) || ( b >= static_cast<int>( g_DorchRoamZones.Size( ))))
+		return false;
+
+	for ( unsigned int i = 0; i < g_DorchRoamZones[a].adjacentZoneIds.Size( ); ++i )
+	{
+		if ( static_cast<int>( g_DorchRoamZones[a].adjacentZoneIds[i] ) == b )
+			return true;
+	}
+	for ( unsigned int i = 0; i < g_DorchRoamZones[b].adjacentZoneIds.Size( ); ++i )
+	{
+		if ( static_cast<int>( g_DorchRoamZones[b].adjacentZoneIds[i] ) == a )
+			return true;
+	}
+	return false;
+}
+
+static int DORCH_WeightedPickZone( const TArray<int> &zoneIds )
+{
+	if ( zoneIds.Size( ) == 0 )
+		return -1;
+
+	int total = 0;
+	for ( unsigned int i = 0; i < zoneIds.Size( ); ++i )
+	{
+		const int zid = zoneIds[i];
+		const int score = ( zid >= 0 && zid < static_cast<int>( g_DorchRoamZones.Size( ))) ? g_DorchRoamZones[zid].interestScore : 1;
+		total += ( score > 0 ) ? score : 1;
+	}
+
+	if ( total <= 0 )
+		return zoneIds[ M_Random( ) % zoneIds.Size( ) ];
+
+	int r = M_Random( ) % total;
+	for ( unsigned int i = 0; i < zoneIds.Size( ); ++i )
+	{
+		const int zid = zoneIds[i];
+		const int score = ( zid >= 0 && zid < static_cast<int>( g_DorchRoamZones.Size( ))) ? g_DorchRoamZones[zid].interestScore : 1;
+		const int w = ( score > 0 ) ? score : 1;
+		if ( r < w )
+			return zid;
+		r -= w;
+	}
+
+	return zoneIds[0];
+}
+
+static void DORCH_ComputeZoneAdjacency( void )
+{
+	// For each zone, mark its two nearest neighbors as "adjacent".
+	for ( unsigned int i = 0; i < g_DorchRoamZones.Size( ); ++i )
+	{
+		g_DorchRoamZones[i].adjacentZoneIds.Clear( );
+		if ( g_DorchRoamZones.Size( ) <= 1 )
+			continue;
+
+		unsigned int best1 = UINT_MAX, best2 = UINT_MAX;
+		int64_t best1d = 0x7fffffffffffffffLL, best2d = 0x7fffffffffffffffLL;
+
+		for ( unsigned int j = 0; j < g_DorchRoamZones.Size( ); ++j )
+		{
+			if ( j == i )
+				continue;
+			const int64_t dx = static_cast<int64_t>( g_DorchRoamZones[j].cx ) - static_cast<int64_t>( g_DorchRoamZones[i].cx );
+			const int64_t dy = static_cast<int64_t>( g_DorchRoamZones[j].cy ) - static_cast<int64_t>( g_DorchRoamZones[i].cy );
+			const int64_t d = ( dx * dx ) + ( dy * dy );
+			if ( d < best1d )
+			{
+				best2 = best1;
+				best2d = best1d;
+				best1 = j;
+				best1d = d;
+			}
+			else if ( d < best2d )
+			{
+				best2 = j;
+				best2d = d;
+			}
+		}
+
+		if ( best1 != UINT_MAX )
+			g_DorchRoamZones[i].adjacentZoneIds.Push( best1 );
+		if ( best2 != UINT_MAX )
+			g_DorchRoamZones[i].adjacentZoneIds.Push( best2 );
+	}
+}
+
+static int DORCH_ChooseKForZones( const int numPoints )
+{
+	if ( numPoints <= 0 )
+		return 0;
+
+	const int kMax = ( numPoints < 16 ) ? numPoints : 16;
+	const int kMin = ( numPoints < 8 ) ? numPoints : 8;
+	if ( kMax <= kMin )
+		return kMax;
+
+	// Scale K with density, but keep it in [kMin, kMax].
+	// 8 zones for small-ish maps, gradually rising to 16 for very dense maps.
+	int k = 8 + ( ( numPoints - 8 ) / 32 );
+	if ( k < kMin ) k = kMin;
+	if ( k > kMax ) k = kMax;
+	return k;
+}
+
+static void DORCH_BuildRoamZones_KMeans( void )
+{
+	// Collect points of interest from the current map.
+	g_DorchRoamPoints.Clear( );
+	g_DorchRoamZones.Clear( );
 
 	TThinkerIterator<AActor> iterator;
 	AActor *actor = NULL;
@@ -731,48 +919,247 @@ static AActor *DORCH_PickRandomRoamTarget( void )
 	{
 		if ( actor->ObjectFlags & OF_EuthanizeMe )
 			continue;
-
-		// Never attach the camera to player pawns.
 		if ( actor->player != NULL )
 			continue;
 
-		// Prefer tangible points of interest.
 		const bool isItem = actor->IsKindOf( RUNTIME_CLASS( AInventory )) && ( actor->flags & MF_SPECIAL );
 		const bool isMonster = ( actor->flags3 & MF3_ISMONSTER ) || ( actor->flags & MF_COUNTKILL );
-
 		if (( isItem == false ) && ( isMonster == false ))
 			continue;
-
-		// Skip dead monsters/corpses.
 		if ( isMonster && ( actor->health <= 0 ))
 			continue;
 
-		candidates.Push( actor );
-		if (( actor != g_pDorchSpectatorLastRoamTarget ) && ( DORCH_IsTooCloseToLastRoamPos( actor, minDist ) == false ))
-			farCandidates.Push( actor );
+		DorchRoamPoint p;
+		p.x = actor->x;
+		p.y = actor->y;
+		p.z = actor->z + actor->height + ( 16 * FRACUNIT );
+		p.interestWeight = isMonster ? 2 : 1;
+		g_DorchRoamPoints.Push( p );
 	}
 
-	if ( candidates.Size( ) == 0 )
-		return NULL;
-
-	// Prefer a candidate that isn't close to the previous teleport spot.
-	if ( farCandidates.Size( ) > 0 )
-		return farCandidates[ M_Random( ) % farCandidates.Size( ) ];
-
-	// Fall back to any candidate (but still prefer not picking the exact same actor when possible).
-	if (( candidates.Size( ) > 1 ) && ( g_pDorchSpectatorLastRoamTarget != NULL ))
+	const int n = static_cast<int>( g_DorchRoamPoints.Size( ));
+	const int k = DORCH_ChooseKForZones( n );
+	if (( n <= 0 ) || ( k <= 0 ))
 	{
-		for ( unsigned int idx = 0; idx < candidates.Size( ); ++idx )
+		g_bDorchRoamZonesReady = true;
+		return;
+	}
+
+	// --- K-means (2D) ---
+	struct Center { fixed_t x; fixed_t y; };
+	TArray<Center> centers;
+	centers.Reserve( k );
+
+	// Initialize centers by sampling unique points.
+	TArray<unsigned int> chosen;
+	chosen.Reserve( k );
+	while ( centers.Size( ) < static_cast<unsigned int>( k ))
+	{
+		const unsigned int idx = static_cast<unsigned int>( M_Random( ) % n );
+		bool already = false;
+		for ( unsigned int j = 0; j < chosen.Size( ); ++j )
 		{
-			if ( candidates[idx] == g_pDorchSpectatorLastRoamTarget )
+			if ( chosen[j] == idx )
 			{
-				candidates.Delete( idx );
+				already = true;
 				break;
 			}
 		}
+		if ( already )
+			continue;
+		chosen.Push( idx );
+		Center c;
+		c.x = g_DorchRoamPoints[idx].x;
+		c.y = g_DorchRoamPoints[idx].y;
+		centers.Push( c );
 	}
 
-	return candidates[ M_Random( ) % candidates.Size( ) ];
+	TArray<int> assignment;
+	assignment.Resize( n );
+
+	for ( int iter = 0; iter < 10; ++iter )
+	{
+		// Assign each point to the nearest center.
+		for ( int i = 0; i < n; ++i )
+		{
+			int best = 0;
+			int64_t bestDist = 0x7fffffffffffffffLL;
+			for ( int c = 0; c < k; ++c )
+			{
+				const int64_t dx = static_cast<int64_t>( g_DorchRoamPoints[i].x ) - static_cast<int64_t>( centers[c].x );
+				const int64_t dy = static_cast<int64_t>( g_DorchRoamPoints[i].y ) - static_cast<int64_t>( centers[c].y );
+				const int64_t d = ( dx * dx ) + ( dy * dy );
+				if ( d < bestDist )
+				{
+					bestDist = d;
+					best = c;
+				}
+			}
+			assignment[i] = best;
+		}
+
+		// Recompute centers.
+		TArray<int64_t> sumX; sumX.Resize( k );
+		TArray<int64_t> sumY; sumY.Resize( k );
+		TArray<int> count; count.Resize( k );
+		for ( int c = 0; c < k; ++c ) { sumX[c] = 0; sumY[c] = 0; count[c] = 0; }
+
+		for ( int i = 0; i < n; ++i )
+		{
+			const int c = assignment[i];
+			sumX[c] += static_cast<int64_t>( g_DorchRoamPoints[i].x );
+			sumY[c] += static_cast<int64_t>( g_DorchRoamPoints[i].y );
+			count[c] += 1;
+		}
+
+		for ( int c = 0; c < k; ++c )
+		{
+			if ( count[c] <= 0 )
+			{
+				// Empty cluster: re-seed to a random point.
+				const int i = M_Random( ) % n;
+				centers[c].x = g_DorchRoamPoints[i].x;
+				centers[c].y = g_DorchRoamPoints[i].y;
+				continue;
+			}
+			centers[c].x = static_cast<fixed_t>( sumX[c] / count[c] );
+			centers[c].y = static_cast<fixed_t>( sumY[c] / count[c] );
+		}
+	}
+
+	// Build zones from final assignments.
+	g_DorchRoamZones.Resize( k );
+	for ( int c = 0; c < k; ++c )
+	{
+		g_DorchRoamZones[c].cx = centers[c].x;
+		g_DorchRoamZones[c].cy = centers[c].y;
+		g_DorchRoamZones[c].pointIndices.Clear( );
+		g_DorchRoamZones[c].adjacentZoneIds.Clear( );
+		g_DorchRoamZones[c].interestScore = 0;
+	}
+
+	for ( int i = 0; i < n; ++i )
+	{
+		const int c = assignment[i];
+		g_DorchRoamZones[c].pointIndices.Push( static_cast<unsigned int>( i ));
+		g_DorchRoamZones[c].interestScore += g_DorchRoamPoints[i].interestWeight;
+	}
+
+	// Drop empty zones (can happen after reseeding + reassignment).
+	for ( int c = static_cast<int>( g_DorchRoamZones.Size( )) - 1; c >= 0; --c )
+	{
+		if ( g_DorchRoamZones[c].pointIndices.Size( ) == 0 )
+			g_DorchRoamZones.Delete( c );
+	}
+
+	DORCH_ComputeZoneAdjacency( );
+	g_bDorchRoamZonesReady = true;
+}
+
+static int DORCH_PickNextRoamZoneId( void )
+{
+	if ( g_DorchRoamZones.Size( ) == 0 )
+		return -1;
+
+	TArray<int> candidates;
+	TArray<int> relaxed;
+	TArray<int> any;
+
+	for ( unsigned int i = 0; i < g_DorchRoamZones.Size( ); ++i )
+	{
+		const int zid = static_cast<int>( i );
+		any.Push( zid );
+
+		const bool adjacentToLast = ( g_iDorchLastRoamZone >= 0 ) && ( zid == g_iDorchLastRoamZone || DORCH_AreZonesAdjacent( zid, g_iDorchLastRoamZone ));
+		if ( adjacentToLast == false )
+			relaxed.Push( zid );
+
+		if (( adjacentToLast == false ) && ( DORCH_IsRecentZone( zid ) == false ))
+			candidates.Push( zid );
+	}
+
+	int chosen = DORCH_WeightedPickZone( candidates );
+	if ( chosen >= 0 )
+		return chosen;
+
+	chosen = DORCH_WeightedPickZone( relaxed );
+	if ( chosen >= 0 )
+		return chosen;
+
+	return DORCH_WeightedPickZone( any );
+}
+
+static bool DORCH_PickRoamPointFromZone( const int zoneId, const fixed_t minDist, DorchRoamPoint &out )
+{
+	if (( zoneId < 0 ) || ( zoneId >= static_cast<int>( g_DorchRoamZones.Size( ))))
+		return false;
+
+	const DorchRoamZone &zone = g_DorchRoamZones[zoneId];
+	if ( zone.pointIndices.Size( ) == 0 )
+		return false;
+
+	// Try to find a point in the zone that's not too close to the last roam position.
+	for ( unsigned int attempt = 0; attempt < zone.pointIndices.Size( ); ++attempt )
+	{
+		const unsigned int pick = zone.pointIndices[ M_Random( ) % zone.pointIndices.Size( ) ];
+		if ( pick >= g_DorchRoamPoints.Size( ) )
+			continue;
+		const DorchRoamPoint &p = g_DorchRoamPoints[pick];
+		if ( DORCH_IsTooCloseToLastRoamPosXY( p.x, p.y, minDist ) )
+			continue;
+		out = p;
+		return true;
+	}
+
+	// Fallback: accept any point in the zone.
+	const unsigned int pick = zone.pointIndices[ M_Random( ) % zone.pointIndices.Size( ) ];
+	if ( pick >= g_DorchRoamPoints.Size( ) )
+		return false;
+	out = g_DorchRoamPoints[pick];
+	return true;
+}
+
+static bool DORCH_PickNextRoamLocation( const fixed_t minDist, int &outZoneId, DorchRoamPoint &outPoint )
+{
+	if ( g_bDorchRoamZonesReady == false )
+		DORCH_BuildRoamZones_KMeans( );
+
+	if ( g_DorchRoamZones.Size( ) == 0 )
+		return false;
+
+	// Try a handful of zones to satisfy the "not same/adjacent" and min-distance constraints.
+	TArray<int> triedZones;
+	for ( int zoneAttempt = 0; zoneAttempt < 8; ++zoneAttempt )
+	{
+		const int zid = DORCH_PickNextRoamZoneId( );
+		if ( zid < 0 )
+			break;
+		bool alreadyTried = false;
+		for ( unsigned int i = 0; i < triedZones.Size( ); ++i )
+		{
+			if ( triedZones[i] == zid )
+			{
+				alreadyTried = true;
+				break;
+			}
+		}
+		if ( alreadyTried )
+			continue;
+		triedZones.Push( zid );
+
+		if ( DORCH_PickRoamPointFromZone( zid, minDist, outPoint ) )
+		{
+			outZoneId = zid;
+			return true;
+		}
+	}
+
+	// Final fallback: any zone, any point.
+	outZoneId = ( g_DorchRoamZones.Size( ) > 0 ) ? ( M_Random( ) % static_cast<int>( g_DorchRoamZones.Size( ))) : -1;
+	if ( outZoneId < 0 )
+		return false;
+
+	return DORCH_PickRoamPointFromZone( outZoneId, 0, outPoint );
 }
 
 static void DORCH_EnsureRoamCamera( void )
@@ -816,23 +1203,29 @@ static void DORCH_RoamTick( void )
 	if ( gametic < g_iDorchSpectatorNextRoamTic )
 		return;
 
-	AActor *target = DORCH_PickRandomRoamTarget( );
-	if ( target == NULL )
+	// Rebuild zones if the map changed.
+	DORCH_MaybeResetRoamZonesForMapChange( );
+	if ( g_bDorchRoamZonesReady == false )
+		DORCH_BuildRoamZones_KMeans( );
+
+	DorchRoamPoint p;
+	int zoneId = -1;
+	const fixed_t minDist = 512 * FRACUNIT;
+	if ( DORCH_PickNextRoamLocation( minDist, zoneId, p ) == false )
 	{
 		g_iDorchSpectatorNextRoamTic = gametic + ( 5 * TICRATE );
 		return;
 	}
 
-	// Put the camera slightly above the target so we don't clip into floors.
-	fixed_t camZ = target->z + target->height + ( 16 * FRACUNIT );
-	P_TeleportMove( g_pDorchSpectatorRoamCamera, target->x, target->y, camZ, false );
+	P_TeleportMove( g_pDorchSpectatorRoamCamera, p.x, p.y, p.z, false );
 
 	// Remember where we went so the next selection isn't "nearby".
 	g_bDorchSpectatorHasLastRoamPos = true;
-	g_DorchSpectatorLastRoamX = target->x;
-	g_DorchSpectatorLastRoamY = target->y;
-	g_DorchSpectatorLastRoamZ = camZ;
-	g_pDorchSpectatorLastRoamTarget = target;
+	g_DorchSpectatorLastRoamX = p.x;
+	g_DorchSpectatorLastRoamY = p.y;
+	g_DorchSpectatorLastRoamZ = p.z;
+	g_iDorchLastRoamZone = zoneId;
+	DORCH_PushRecentZone( zoneId );
 
 	// Pick the direction that has the most open space.
 	DORCH_AimRoamCameraTowardOpenSpace( g_pDorchSpectatorRoamCamera );
@@ -862,7 +1255,10 @@ static void DORCH_SpectatorTick( void )
 		g_iDorchSpectatorPendingShotTic = -1;
 		g_iDorchSpectatorNextRoamTic = gametic + ( 5 * TICRATE );
 		g_bDorchSpectatorHasLastRoamPos = false;
-		g_pDorchSpectatorLastRoamTarget = NULL;
+		strncpy( g_szDorchLastRoamMapName, level.mapname, 8 );
+		g_szDorchLastRoamMapName[8] = '\0';
+		DORCH_ResetRoamZones( );
+		DORCH_BuildRoamZones_KMeans( );
 
 		// Ensure the rendered view is clean (no status bar, no weapon sprites).
 		UCVarValue cleanVal;
