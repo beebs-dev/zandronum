@@ -602,6 +602,9 @@ static int g_iDorchSpectatorPendingShotTic = -1;
 static char g_szDorchSpectatorShotPathFinal[] = "/screenshot.png";
 static char g_szDorchSpectatorShotPathTmp[] = "/screenshot.png.tmp";
 
+// [dorch] When one or more players are present, cycle the spy target periodically.
+static int g_iDorchSpectatorNextSpySwitchTic = 0;
+
 static int g_iDorchSpectatorNextRoamTic = 0;
 static AActor *g_pDorchSpectatorRoamCamera = NULL;
 
@@ -1310,6 +1313,7 @@ static void DORCH_SpectatorTick( void )
 		g_bDorchSpectatorInitialized = true;
 		g_iDorchSpectatorNextCycleTic = gametic + TICRATE;
 		g_iDorchSpectatorPendingShotTic = -1;
+		g_iDorchSpectatorNextSpySwitchTic = gametic;
 		g_iDorchSpectatorNextRoamTic = gametic + ( 5 * TICRATE );
 		g_bDorchSpectatorHasLastRoamPos = false;
 		strncpy( g_szDorchLastRoamMapName, level.mapname, 8 );
@@ -1328,9 +1332,44 @@ static void DORCH_SpectatorTick( void )
 		return;
 	}
 
-	// If nobody is connected, roam the map to make the stream more interesting.
-	// This is intentionally independent of the screenshot cadence.
-	DORCH_RoamTick( );
+	const bool hasPlayersToSpy = DORCH_HasAnyNonSpectatorPlayers( );
+
+	// If players join while we're idling through the roam camera, switch back to our
+	// own body first so spy commands can actually select a player.
+	if (( hasPlayersToSpy ) && ( g_pDorchSpectatorRoamCamera != NULL ) && ( players[consoleplayer].camera == g_pDorchSpectatorRoamCamera ))
+	{
+		if ( players[consoleplayer].mo != NULL )
+		{
+			players[consoleplayer].camera = players[consoleplayer].mo;
+			S_UpdateSounds( players[consoleplayer].camera );
+		}
+		g_iDorchSpectatorNextSpySwitchTic = gametic;
+	}
+
+	// When at least one player exists, cycle through them every 10 seconds.
+	// If there are no players to spectate, keep the existing idle roaming behavior.
+	if ( hasPlayersToSpy )
+	{
+		const int switchIntervalTics = 10 * TICRATE;
+		if ( gametic >= g_iDorchSpectatorNextSpySwitchTic )
+		{
+			// Ensure we're anchored to a real player actor before trying to spy.
+			if (( players[consoleplayer].camera == NULL ) || ( players[consoleplayer].camera->player == NULL ))
+			{
+				if ( players[consoleplayer].mo != NULL )
+					players[consoleplayer].camera = players[consoleplayer].mo;
+			}
+			C_DoCommand( "spynext" );
+			g_iDorchSpectatorNextSpySwitchTic = gametic + switchIntervalTics;
+		}
+	}
+	else
+	{
+		// If nobody is connected, roam the map to make the stream more interesting.
+		DORCH_RoamTick( );
+		// Make the next player switch immediate once someone joins.
+		g_iDorchSpectatorNextSpySwitchTic = gametic;
+	}
 
 	// Clamp CVARs to reasonable values so we can't accidentally hammer the engine.
 	const int intervalTics = ( dorch_spectator_interval_tics < 1 ) ? 1 : dorch_spectator_interval_tics;
@@ -1349,10 +1388,13 @@ static void DORCH_SpectatorTick( void )
 
 	if ( gametic >= g_iDorchSpectatorNextCycleTic )
 	{
-		// Choose a player to spy on (safe now that we're authenticated/active).
-		// If there are no players, DORCH_RoamTick( ) will keep the view interesting.
-		if ( DORCH_HasAnyNonSpectatorPlayers( ))
-			C_DoCommand( "spyrandom" );
+		// If players are present, player cycling above is responsible for selecting
+		// who to spectate. If we're not currently spying on a player, nudge us onto one.
+		if ( hasPlayersToSpy )
+		{
+			if (( players[consoleplayer].camera == NULL ) || ( players[consoleplayer].camera->player == NULL ) || ( players[consoleplayer].camera->player == &players[consoleplayer] ))
+				C_DoCommand( "spynext" );
+		}
 
 		// Delay a few tics so the view/player change has time to take effect.
 		g_iDorchSpectatorPendingShotTic = gametic + shotDelayTics;
