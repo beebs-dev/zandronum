@@ -153,6 +153,34 @@
         box-shadow: 0 10px 20px rgba(0, 0, 0, 0.45);
       }
 
+      .touch-btn-icon {
+        pointer-events: auto;
+        touch-action: none;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border-radius: 12px;
+        border: 2px solid rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.92);
+        display: grid;
+        place-items: center;
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.45);
+      }
+
+      .touch-btn-icon svg {
+        width: 22px;
+        height: 22px;
+        display: block;
+        opacity: 0.95;
+      }
+
+      .touch-btn-icon:active,
+      .touch-btn-icon[data-down='1'] {
+        transform: translateY(1px) scale(0.99);
+        filter: brightness(1.05);
+      }
+
       #touch-spacebar {
         position: fixed;
         left: 50%;
@@ -354,8 +382,22 @@
     <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
     <div id="touch-layer" data-visible="0" aria-hidden="true">
       <div id="touch-topleft">
-        <div id="touch-menu" class="touch-btn-sm" data-down="0">MENU</div>
-        <div id="touch-map" class="touch-btn-sm" data-down="0">MAP</div>
+        <div id="touch-menu" class="touch-btn-icon" data-down="0" aria-label="Menu" title="Menu">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M4 6h16" />
+            <path d="M4 12h16" />
+            <path d="M4 18h16" />
+          </svg>
+        </div>
+        <div id="touch-map" class="touch-btn-icon" data-down="0" aria-label="Scoreboard" title="Scoreboard">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4" y="5" width="16" height="14" rx="2" />
+            <path d="M8 9h2" />
+            <path d="M12 9h6" />
+            <path d="M8 13h2" />
+            <path d="M12 13h6" />
+          </svg>
+        </div>
       </div>
       <div id="touch-joystick">
         <div id="touch-joystick-knob"></div>
