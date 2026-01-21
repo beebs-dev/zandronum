@@ -605,6 +605,9 @@ static char g_szDorchSpectatorShotPathTmp[] = "/screenshot.png.tmp";
 // [dorch] When one or more players are present, cycle the spy target periodically.
 static int g_iDorchSpectatorNextSpySwitchTic = 0;
 
+// [dorch] Track whether we've enabled weapon sprites for the current view.
+static bool g_bDorchSpectatorLastDrawPlayerSprites = false;
+
 static int g_iDorchSpectatorNextRoamTic = 0;
 static AActor *g_pDorchSpectatorRoamCamera = NULL;
 
@@ -1327,12 +1330,26 @@ static void DORCH_SpectatorTick( void )
 		screenblocks.ForceSet( cleanVal, CVAR_Int );
 		cleanVal.Bool = false;
 		r_drawplayersprites.ForceSet( cleanVal, CVAR_Bool );
+		g_bDorchSpectatorLastDrawPlayerSprites = false;
 
 		CLIENTCOMMANDS_Spectate( );
 		return;
 	}
 
 	const bool hasPlayersToSpy = DORCH_HasAnyNonSpectatorPlayers( );
+	const bool isFollowingOtherPlayer = ( players[consoleplayer].camera != NULL ) &&
+		( players[consoleplayer].camera->player != NULL ) &&
+		( players[consoleplayer].camera->player != &players[consoleplayer] );
+
+	// When spying a real player, show that player's weapon sprite (gun). Otherwise,
+	// keep the existing clean spectator/roam view.
+	if ( g_bDorchSpectatorLastDrawPlayerSprites != isFollowingOtherPlayer )
+	{
+		UCVarValue spriteVal;
+		spriteVal.Bool = isFollowingOtherPlayer;
+		r_drawplayersprites.ForceSet( spriteVal, CVAR_Bool );
+		g_bDorchSpectatorLastDrawPlayerSprites = isFollowingOtherPlayer;
+	}
 
 	// If players join while we're idling through the roam camera, switch back to our
 	// own body first so spy commands can actually select a player.
