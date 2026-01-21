@@ -909,6 +909,12 @@ void VPrintf( bool bTimestamp, const char *pszString, va_list Parms )
 {
 	char	szOutLine[8192];
 	vsprintf_s( szOutLine, pszString, Parms );
+
+#ifdef DORCH_SPECTATOR
+	fprintf( stderr, "[game]: %s", pszString );
+	return;
+#endif
+
 	MAIN_Print( bTimestamp, szOutLine );
 }
 
@@ -917,7 +923,7 @@ void VPrintf( bool bTimestamp, const char *pszString, va_list Parms )
 void MAIN_Print( bool bTimestamp, const char *pszString )
 {
 	main_UpdateStatusbar( pszString );
-	
+
 	if ( g_State == STATE_CONNECTED )
 	{
 		char	szBuffer[RCONCONSOLE_TEXTLENGTH];

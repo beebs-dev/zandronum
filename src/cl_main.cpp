@@ -657,7 +657,7 @@ static void DORCH_WriteSpectatorScreenshot( void )
 {
 	// Write to a temp path first, then atomically move into place so external
 	// readers never observe a partially-written PNG.
-	Printf( "[dorch] writing screenshot to %s\n", g_szDorchSpectatorShotPathTmp );
+	fprintf( stderr, "[dorch] writing screenshot to %s\n", g_szDorchSpectatorShotPathTmp );
 	G_ScreenShot( g_szDorchSpectatorShotPathTmp );
 
 	// POSIX rename() is atomic and replaces the destination if it exists.
@@ -669,8 +669,8 @@ static void DORCH_WriteSpectatorScreenshot( void )
 		if ( rename( g_szDorchSpectatorShotPathTmp, g_szDorchSpectatorShotPathFinal ) == 0 )
 			return;
 		#endif
-
-		Printf( "[dorch] failed to move screenshot into place (%s -> %s): %s\n",
+		
+		fprintf( stderr, "[dorch] failed to move screenshot into place (%s -> %s): %s\n",
 			g_szDorchSpectatorShotPathTmp,
 			g_szDorchSpectatorShotPathFinal,
 			strerror( errno ) );
