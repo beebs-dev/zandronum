@@ -50,8 +50,8 @@ VIDEO_FPS=${VIDEO_FPS:-30}
 VIDEO_GOP_SECONDS=${VIDEO_GOP_SECONDS:-2}
 VIDEO_GOP=$((VIDEO_FPS * VIDEO_GOP_SECONDS))
 VIDEO_BITRATE=${VIDEO_BITRATE:-1200k}
-VIDEO_BUFSIZE=${VIDEO_BUFSIZE:-2400k}
-X264_PRESET=${X264_PRESET:-superfast}
+VIDEO_BUFSIZE=${VIDEO_BUFSIZE:-1200k}
+X264_PRESET=${X264_PRESET:-ultrafast}
 
 # ffmpeg buffering/memory controls.
 #
@@ -518,17 +518,13 @@ while kill -0 "$game_pid" 2>/dev/null; do
       else
         echo "[watcher] Using /screenshot.png directly"
       fi
+   
+      echo "[watcher] Converting /screenshot.png -> /screenshot.webp (resize ${VIDEO_WIDTH}x${VIDEO_HEIGHT}!, quality=70)"
+      convert /screenshot.png -resize ${VIDEO_WIDTH}x${VIDEO_HEIGHT}\! -quality 70 /screenshot.webp.tmp
+      mv -f /screenshot.webp.tmp /screenshot.webp
 
-      if [[ -f /screenshot.webp ]]; then
-        echo "[watcher] /screenshot.webp pending upload; not overwriting"
-      else
-        echo "[watcher] Converting /screenshot.png -> /screenshot.webp (resize ${VIDEO_WIDTH}x${VIDEO_HEIGHT}!, quality=70)"
-        convert /screenshot.png -resize ${VIDEO_WIDTH}x${VIDEO_HEIGHT}\! -quality 70 /screenshot.webp.tmp
-        mv -f /screenshot.webp.tmp /screenshot.webp
-
-        out_sz=$(stat -c %s /screenshot.webp 2>/dev/null || echo "")
-        echo "[watcher] Wrote /screenshot.webp (bytes=${out_sz:-?})"
-      fi
+      out_sz=$(stat -c %s /screenshot.webp 2>/dev/null || echo "")
+      echo "[watcher] Wrote /screenshot.webp (bytes=${out_sz:-?})"
 
       # Attempt upload immediately after producing a new shot.
       try_upload_liveshot || true
