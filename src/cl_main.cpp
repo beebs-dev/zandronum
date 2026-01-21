@@ -140,6 +140,10 @@
 #include "gameconfigfile.h"
 #include "wi_stuff.h"
 
+#ifdef DORCH_SPECTATOR
+#include "p_trace.h"
+#endif
+
 //*****************************************************************************
 //	MISC CRAP THAT SHOULDN'T BE HERE BUT HAS TO BE BECAUSE OF SLOPPY CODING
 
@@ -601,6 +605,12 @@ static char g_szDorchSpectatorShotPathTmp[] = "/screenshot.png.tmp";
 static int g_iDorchSpectatorNextRoamTic = 0;
 static AActor *g_pDorchSpectatorRoamCamera = NULL;
 
+static bool g_bDorchSpectatorHasLastRoamPos = false;
+static fixed_t g_DorchSpectatorLastRoamX = 0;
+static fixed_t g_DorchSpectatorLastRoamY = 0;
+static fixed_t g_DorchSpectatorLastRoamZ = 0;
+static AActor *g_pDorchSpectatorLastRoamTarget = NULL;
+
 static void DORCH_WriteSpectatorScreenshot( void )
 {
 	// Write to a temp path first, then atomically move into place so external
@@ -647,9 +657,73 @@ static bool DORCH_HasAnyNonSpectatorPlayers( void )
 	return false;
 }
 
+static bool DORCH_IsTooCloseToLastRoamPos( const AActor *actor, const fixed_t minDist )
+{
+	if (( actor == NULL ) || ( g_bDorchSpectatorHasLastRoamPos == false ))
+		return false;
+
+	const int64_t dx = static_cast<int64_t>( actor->x ) - static_cast<int64_t>( g_DorchSpectatorLastRoamX );
+	const int64_t dy = static_cast<int64_t>( actor->y ) - static_cast<int64_t>( g_DorchSpectatorLastRoamY );
+	const int64_t minDist64 = static_cast<int64_t>( minDist );
+	const int64_t distSq = ( dx * dx ) + ( dy * dy );
+	const int64_t minDistSq = ( minDist64 * minDist64 );
+
+	return distSq < minDistSq;
+}
+
+static void DORCH_AimRoamCameraTowardOpenSpace( AActor *camera )
+{
+	if ( camera == NULL )
+		return;
+
+	sector_t *sector = camera->Sector;
+	if (( sector == NULL ) && ( camera->subsector != NULL ))
+		sector = camera->subsector->sector;
+
+	if ( sector == NULL )
+		return;
+
+	// Cast horizontal rays and pick the direction with the greatest unobstructed distance.
+	const int kNumRays = 64;
+	const fixed_t kMaxDist = 8192 * FRACUNIT;
+	const angle_t step = ( ANGLE_1 * 360u ) / kNumRays;
+	const angle_t base = ( static_cast<angle_t>( M_Random( )) << 24 );
+
+	fixed_t bestDist = -1;
+	angle_t bestAngle = camera->angle;
+
+	for ( int i = 0; i < kNumRays; ++i )
+	{
+		const angle_t ang = base + ( step * static_cast<angle_t>( i ));
+		const unsigned fine = ang >> ANGLETOFINESHIFT;
+		const fixed_t vx = finecosine[fine];
+		const fixed_t vy = finesine[fine];
+		const fixed_t vz = 0;
+
+		FTraceResults trace;
+		Trace( camera->x, camera->y, camera->z, sector,
+			vx, vy, vz, kMaxDist,
+			0, 0, camera,
+			trace,
+			TRACE_NoSky );
+
+		if ( trace.Distance > bestDist )
+		{
+			bestDist = trace.Distance;
+			bestAngle = ang;
+		}
+	}
+
+	camera->angle = bestAngle;
+	camera->pitch = 0;
+}
+
 static AActor *DORCH_PickRandomRoamTarget( void )
 {
 	TArray<AActor *> candidates;
+	TArray<AActor *> farCandidates;
+
+	const fixed_t minDist = 512 * FRACUNIT;
 
 	TThinkerIterator<AActor> iterator;
 	AActor *actor = NULL;
@@ -674,10 +748,29 @@ static AActor *DORCH_PickRandomRoamTarget( void )
 			continue;
 
 		candidates.Push( actor );
+		if (( actor != g_pDorchSpectatorLastRoamTarget ) && ( DORCH_IsTooCloseToLastRoamPos( actor, minDist ) == false ))
+			farCandidates.Push( actor );
 	}
 
 	if ( candidates.Size( ) == 0 )
 		return NULL;
+
+	// Prefer a candidate that isn't close to the previous teleport spot.
+	if ( farCandidates.Size( ) > 0 )
+		return farCandidates[ M_Random( ) % farCandidates.Size( ) ];
+
+	// Fall back to any candidate (but still prefer not picking the exact same actor when possible).
+	if (( candidates.Size( ) > 1 ) && ( g_pDorchSpectatorLastRoamTarget != NULL ))
+	{
+		for ( unsigned int idx = 0; idx < candidates.Size( ); ++idx )
+		{
+			if ( candidates[idx] == g_pDorchSpectatorLastRoamTarget )
+			{
+				candidates.Delete( idx );
+				break;
+			}
+		}
+	}
 
 	return candidates[ M_Random( ) % candidates.Size( ) ];
 }
@@ -734,9 +827,15 @@ static void DORCH_RoamTick( void )
 	fixed_t camZ = target->z + target->height + ( 16 * FRACUNIT );
 	P_TeleportMove( g_pDorchSpectatorRoamCamera, target->x, target->y, camZ, false );
 
-	// Randomize view direction a bit to keep things varied.
-	g_pDorchSpectatorRoamCamera->angle = ( static_cast<angle_t>( M_Random( )) << 24 );
-	g_pDorchSpectatorRoamCamera->pitch = 0;
+	// Remember where we went so the next selection isn't "nearby".
+	g_bDorchSpectatorHasLastRoamPos = true;
+	g_DorchSpectatorLastRoamX = target->x;
+	g_DorchSpectatorLastRoamY = target->y;
+	g_DorchSpectatorLastRoamZ = camZ;
+	g_pDorchSpectatorLastRoamTarget = target;
+
+	// Pick the direction that has the most open space.
+	DORCH_AimRoamCameraTowardOpenSpace( g_pDorchSpectatorRoamCamera );
 
 	S_UpdateSounds( g_pDorchSpectatorRoamCamera );
 	g_iDorchSpectatorNextRoamTic = gametic + ( 5 * TICRATE );
@@ -762,6 +861,8 @@ static void DORCH_SpectatorTick( void )
 		g_iDorchSpectatorNextCycleTic = gametic + TICRATE;
 		g_iDorchSpectatorPendingShotTic = -1;
 		g_iDorchSpectatorNextRoamTic = gametic + ( 5 * TICRATE );
+		g_bDorchSpectatorHasLastRoamPos = false;
+		g_pDorchSpectatorLastRoamTarget = NULL;
 
 		// Ensure the rendered view is clean (no status bar, no weapon sprites).
 		UCVarValue cleanVal;
