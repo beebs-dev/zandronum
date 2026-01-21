@@ -255,6 +255,8 @@ namespace
 		int player_count = 0;
 		int skill = 0;
 		std::string current_map;
+		bool has_map_title = false;
+		std::string map_title;
 		long long server_started_at = 0;
 		long long map_started_at = 0;
 		int monster_kill_count = 0;
@@ -411,6 +413,10 @@ namespace
 		dorch_json_field_set_int( json, first, "player_count", s.player_count );
 		dorch_json_field_set_int( json, first, "skill", s.skill );
 		dorch_json_field_set_string( json, first, "current_map", s.current_map );
+		if ( s.has_map_title )
+			dorch_json_field_set_string( json, first, "map_title", s.map_title );
+		else
+			dorch_json_field_unset( json, first, "map_title" );
 		dorch_json_field_set_i64( json, first, "server_started_at", s.server_started_at );
 		dorch_json_field_set_i64( json, first, "map_started_at", s.map_started_at );
 		dorch_json_field_set_int( json, first, "monster_kill_count", s.monster_kill_count );
@@ -475,6 +481,8 @@ namespace
 				a.player_count == b.player_count &&
 				a.skill == b.skill &&
 				a.current_map == b.current_map &&
+				a.has_map_title == b.has_map_title &&
+				a.map_title == b.map_title &&
 				a.server_started_at == b.server_started_at &&
 				a.map_started_at == b.map_started_at &&
 				a.monster_kill_count == b.monster_kill_count &&
@@ -670,6 +678,21 @@ namespace
 		s->player_count = (int)SERVER_CountPlayers( true );
 		s->skill = (int)gameskill;
 		s->current_map = level.mapname;
+
+		// Only report a map title if the map exists in wadlevelinfos (i.e. the WAD defines it).
+		if ( level.mapname[0] != '\0' )
+		{
+			level_info_t *mapinfo = FindLevelByName( level.mapname );
+			if ( mapinfo != nullptr )
+			{
+				FString title = mapinfo->LookupLevelName( );
+				if ( title.IsNotEmpty( ) )
+				{
+					s->has_map_title = true;
+					s->map_title = title.GetChars( );
+				}
+			}
+		}
 		s->server_started_at = g_dorch_server_started_at_ms;
 		s->map_started_at = g_dorch_map_started_at_ms;
 		s->monster_kill_count = level.killed_monsters;

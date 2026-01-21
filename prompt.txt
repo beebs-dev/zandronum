@@ -1,1 +1,1 @@
-when a player disconnects from the serve, I want the server to remember their state (world location & orientation, weapons, ammo, keys, health, etc.)
+in the dorch reporter loop for the server, I want to report the current map title as the `map_title` field. Ensure the actual map title from the wad is used if it is present, otherwise omit this field
