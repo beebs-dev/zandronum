@@ -1134,11 +1134,17 @@ int PrintString (int printlevel, const char *outline)
 	if ( con_colorinmessages == 0 )
 		V_RemoveColorCodes( outlinecopy );
 
+#ifdef DORCH_SPECTATOR
+	// In spectator container mode, write to stdout for pod logs and never
+	// draw messages in the in-game console/notify overlay.
+	fputs( outlinecopy, stdout );
+	fflush( stdout );
+#else
 	if (printlevel != PRINT_LOG)
 	{
 		I_PrintStr (outlinecopy);
-
 		AddToConsole (printlevel, outlinecopy);
+
 		if ( NETWORK_GetState( ) != NETSTATE_SERVER )
 		{
 			if (vidactive && screen && SmallFont)
@@ -1148,6 +1154,7 @@ int PrintString (int printlevel, const char *outline)
 			}
 		}
 	}
+#endif
 	const int length = static_cast<int>(strlen (outlinecopy));
 	delete [] outlinecopy;
 	return length;
