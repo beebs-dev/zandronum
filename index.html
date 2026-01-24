@@ -624,6 +624,10 @@
         return typeof s === 'string' && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(s);
       }
 
+      function normalizeUuid(s) {
+        return String(s ?? '').toLowerCase();
+      }
+
       function parseCommaSeparatedUuids(text) {
         const raw = String(text ?? '').trim();
         if (!raw) return [];
@@ -636,9 +640,9 @@
             if (!extracted) {
               throw new Error(`invalid UUID in pwad list: "${p}"`);
             }
-            out.push(extracted);
+            out.push(normalizeUuid(extracted));
           } else {
-            out.push(p);
+            out.push(normalizeUuid(p));
           }
         }
         return out;
@@ -652,7 +656,7 @@
         const iwad = getParam('iwad');
         if (!iwad) return null;
 
-        const iwadId = isUuid(iwad) ? iwad : extractFirstUuid(iwad);
+        const iwadId = isUuid(iwad) ? normalizeUuid(iwad) : normalizeUuid(extractFirstUuid(iwad));
         if (!iwadId) {
           throw new Error('invalid iwad (expected UUID)');
         }
@@ -979,7 +983,6 @@
           // fetch game info (routed to the master crate; response is a GameSummary JSON).
           const gameId = getGameIdForInfoOrThrow(joinArg);
           const gameInfoJson = await fetchGameInfo(gameId);
-          wadIds = extractWadIdsFromGameInfoJson(gameInfoJson);
 
           // Determine IWAD vs PWAD IDs based on game info (prefer root.*; fallback info.*).
           const root = gameInfoJson && typeof gameInfoJson === 'object' ? gameInfoJson : {};
@@ -992,6 +995,11 @@
           if (!iwadId) {
             throw new Error('game info missing iwad UUID');
           }
+
+          // Normalize IDs (case-insensitive UUIDs) so they match wad_urls response keys.
+          iwadId = normalizeUuid(iwadId);
+          pwadIds = pwadIds.map((id) => normalizeUuid(id));
+          wadIds = [iwadId, ...pwadIds];
         } else {
           iwadId = singlePlayer.iwadId;
           pwadIds = singlePlayer.pwadIds;
