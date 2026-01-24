@@ -734,8 +734,102 @@
         return '.wad';
       }
 
+      // Dorch browser settings overrides (shared with browser/ Settings modal).
+      const LS_NAME_KEY = 'dorch.settings.name';
+      const LS_CONFIG_KEY = 'dorch.settings.config';
+      const LS_DOOM2_META_KEY = 'dorch.settings.doom2_override';
+      const IDB_DB_NAME = 'dorch.settings';
+      const IDB_STORE_FILES = 'files';
+      const IDB_DOOM2_KEY = 'doom2_override';
+      const FREEDOOM2_IWAD_ID = '17bdc0a8-8a81-4b00-90d1-972bf406fa10';
+
+      let dorchSettings = null;
+
+      function safeJsonParse(value) {
+        if (!value) return null;
+        try {
+          return JSON.parse(value);
+        } catch {
+          return null;
+        }
+      }
+
+      function openSettingsDb() {
+        return new Promise((resolve, reject) => {
+          if (typeof indexedDB === 'undefined') {
+            reject(new Error('indexedDB missing'));
+            return;
+          }
+          const req = indexedDB.open(IDB_DB_NAME, 1);
+          req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains(IDB_STORE_FILES)) {
+              db.createObjectStore(IDB_STORE_FILES);
+            }
+          };
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      async function idbGetFile(key) {
+        const db = await openSettingsDb();
+        try {
+          return await new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_STORE_FILES, 'readonly');
+            tx.oncomplete = () => {};
+            tx.onerror = () => reject(tx.error);
+            const req = tx.objectStore(IDB_STORE_FILES).get(key);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+          });
+        } finally {
+          try { db.close(); } catch (_) {}
+        }
+      }
+
+      async function loadDorchSettings() {
+        const out = {
+          name: null,
+          config: null,
+          doom2Meta: null,
+          doom2OverrideBytes: null,
+        };
+
+        // localStorage is optional (can throw in some privacy modes).
+        try {
+          out.name = window.localStorage.getItem(LS_NAME_KEY);
+          out.config = window.localStorage.getItem(LS_CONFIG_KEY);
+          out.doom2Meta = safeJsonParse(window.localStorage.getItem(LS_DOOM2_META_KEY));
+        } catch (_) {
+          // ignore
+        }
+
+        // IndexedDB raw bytes (optional). We try regardless of localStorage metadata,
+        // since some browsers/users may clear localStorage but keep IDB entries.
+        try {
+          const rec = await idbGetFile(IDB_DOOM2_KEY);
+          const data = rec && typeof rec === 'object' ? rec.data : null;
+          if (data instanceof ArrayBuffer) {
+            out.doom2OverrideBytes = new Uint8Array(data);
+          } else if (data && data.buffer instanceof ArrayBuffer) {
+            // Typed array / DataView
+            const offset = Number(data.byteOffset) || 0;
+            const len = Number(data.byteLength) || (data.buffer.byteLength - offset);
+            out.doom2OverrideBytes = new Uint8Array(data.buffer, offset, len);
+          }
+        } catch (_) {
+          // ignore
+        }
+
+        return out;
+      }
+
       function getIdentityFromUrl() {
-        return getParam('identity');
+        const fromUrl = getParam('identity');
+        if (fromUrl) return fromUrl;
+        const fromSettings = dorchSettings && typeof dorchSettings.name === 'string' ? dorchSettings.name : null;
+        return fromSettings && String(fromSettings).trim() ? String(fromSettings) : null;
       }
 
       async function join(serverArg) {
@@ -815,6 +909,9 @@
           throw new Error('Emscripten module factory missing (createZandronumModule).');
         }
 
+        // Load optional client-side overrides (name/config/doom2.wad override).
+        dorchSettings = await loadDorchSettings();
+
         // Before attempting to initialize the game or connect over WebRTC,
         // fetch game info (routed to the master crate; response is a GameSummary JSON).
         const joinArg = getGameIdFromUrl();
@@ -848,7 +945,19 @@
         let wadBytesById = new Map();
         const wadPathById = new Map();
         const allIds = [iwadId, ...pwadIds];
+
+        // If user provided a doom2.wad override, replace freedoom2.wad (specific IWAD ID) with it.
+        const doom2OverrideBytes = dorchSettings && dorchSettings.doom2OverrideBytes;
+        const hasDoom2Override = (iwadId === FREEDOOM2_IWAD_ID)
+          && doom2OverrideBytes && doom2OverrideBytes.length;
+
         for (const id of allIds) {
+          if (id === iwadId && hasDoom2Override) {
+            wadBytesById.set(id, doom2OverrideBytes);
+            wadPathById.set(id, `/wads/${id}.wad`);
+            console.log('Using doom2_override for IWAD id=', id);
+            continue;
+          }
           const url = urlByWadId.get(id);
           if (!url) {
             throw new Error(`missing resolved URL for wad_id=${id}`);
@@ -1522,6 +1631,24 @@
           throw e;
         }
 
+        // Optional: write user-provided config and point Zandronum at it.
+        const configText = dorchSettings && typeof dorchSettings.config === 'string' ? dorchSettings.config : '';
+        const configPath = configText && String(configText).trim()
+          ? '/home/web_user/.config/dorch/zdoom.cfg'
+          : null;
+        if (configPath) {
+          try {
+            try { zand.FS.mkdir('/home'); } catch (_) {}
+            try { zand.FS.mkdir('/home/web_user'); } catch (_) {}
+            try { zand.FS.mkdir('/home/web_user/.config'); } catch (_) {}
+            try { zand.FS.mkdir('/home/web_user/.config/dorch'); } catch (_) {}
+            zand.FS.writeFile(configPath, new TextEncoder().encode(String(configText)));
+            console.log('Wrote overridden config at', configPath);
+          } catch (e) {
+            console.warn('Failed to write overridden config:', e);
+          }
+        }
+
         if (debugEnabled) {
           try {
             const hasFs = !!zand.FS;
@@ -1550,10 +1677,19 @@
         console.log('pwadPaths:', pwadPaths);
         try {
           const args = [];
+          if (configPath) {
+            args.push('-config', configPath);
+          }
           args.push('-iwad', iwadPath);
           for (const p of pwadPaths) {
             args.push('-file', p);
           }
+
+          const overrideName = dorchSettings && typeof dorchSettings.name === 'string' ? dorchSettings.name : null;
+          if (overrideName && String(overrideName).trim()) {
+            args.push('+set', 'name', String(overrideName));
+          }
+
           args.push(
             '-connect',
             '127.0.0.1',
