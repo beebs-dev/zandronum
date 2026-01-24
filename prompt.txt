@@ -1,1 +1,0 @@
-in the dorch reporter loop for the server, I want to report the current map title as the `map_title` field. Ensure the actual map title from the wad is used if it is present, otherwise omit this field
