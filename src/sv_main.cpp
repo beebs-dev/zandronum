@@ -676,7 +676,7 @@ namespace
 		DorchSnapshot *s = new DorchSnapshot( );
 		s->max_players = (int)sv_maxplayers;
 		s->player_count = (int)SERVER_CountPlayers( true );
-		s->skill = (int)gameskill;
+		s->skill = (int)gameskill + 1;
 		s->current_map = level.mapname;
 
 		// Only report a map title if the map exists in wadlevelinfos (i.e. the WAD defines it).
