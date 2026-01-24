@@ -2,6 +2,7 @@
 set -euo pipefail
 RESOLVE_SCRIPT_PATH=$(dirname "$0")/resolve-by-id.sh
 echo "Game ID: ${GAME_ID:-unset}"
+echo "Server Name: ${SERVER_NAME:-Zandronum Server}"
 echo "Using IWAD_ID: $IWAD_ID"
 echo "Warp Level: ${WARP:-unset}"
 echo "Using Game Skill: ${SKILL:-unset}"
@@ -61,6 +62,7 @@ SERVER=(
   +sv_doubleammo 1
   +sv_weaponstay 1
   +sv_itemrespawn 1
+  +sv_hostname "$SERVER_NAME"
 )
 
 if [[ -n "${WAD_LIST:-}" ]]; then
