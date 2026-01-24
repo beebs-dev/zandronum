@@ -620,6 +620,55 @@
         return getParam('q') || getParam('g');
       }
 
+      function isUuid(s) {
+        return typeof s === 'string' && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(s);
+      }
+
+      function parseCommaSeparatedUuids(text) {
+        const raw = String(text ?? '').trim();
+        if (!raw) return [];
+        const parts = raw.split(',').map((x) => String(x).trim()).filter(Boolean);
+        const out = [];
+        for (const p of parts) {
+          // Accept exactly one UUID per entry.
+          if (!isUuid(p)) {
+            const extracted = extractFirstUuid(p);
+            if (!extracted) {
+              throw new Error(`invalid UUID in pwad list: "${p}"`);
+            }
+            out.push(extracted);
+          } else {
+            out.push(p);
+          }
+        }
+        return out;
+      }
+
+      function getSinglePlayerParamsFromUrl() {
+        // Single player is used when no ?q/?g is provided.
+        // Required: ?iwad=<uuid>
+        // Optional: ?pwad=<uuid,uuid,...>
+        // Optional: ?warp=<map>
+        const iwad = getParam('iwad');
+        if (!iwad) return null;
+
+        const iwadId = isUuid(iwad) ? iwad : extractFirstUuid(iwad);
+        if (!iwadId) {
+          throw new Error('invalid iwad (expected UUID)');
+        }
+
+        const pwadRaw = getParam('pwad');
+        const pwadIds = pwadRaw ? parseCommaSeparatedUuids(pwadRaw) : [];
+
+        const warpRaw = getParam('warp');
+        const warp = warpRaw && String(warpRaw).trim() ? String(warpRaw).trim() : null;
+        if (warp && !/^[A-Za-z0-9_]+$/.test(warp)) {
+          throw new Error('invalid warp (expected map name like MAP01 or E1M1)');
+        }
+
+        return { iwadId, pwadIds, warp };
+      }
+
       function extractFirstUuid(text) {
         const s = String(text ?? '');
         // Match a canonical UUID (accept any version/variant).
@@ -902,9 +951,6 @@
       }
 
       async function main() {
-        if (!window.LivekitClient) {
-          throw new Error('LiveKit SDK failed to load (LivekitClient global missing).');
-        }
         if (typeof window.createZandronumModule !== 'function') {
           throw new Error('Emscripten module factory missing (createZandronumModule).');
         }
@@ -912,12 +958,47 @@
         // Load optional client-side overrides (name/config/doom2.wad override).
         dorchSettings = await loadDorchSettings();
 
-        // Before attempting to initialize the game or connect over WebRTC,
-        // fetch game info (routed to the master crate; response is a GameSummary JSON).
         const joinArg = getGameIdFromUrl();
-        const gameId = getGameIdForInfoOrThrow(joinArg);
-        const gameInfoJson = await fetchGameInfo(gameId);
-        const wadIds = extractWadIdsFromGameInfoJson(gameInfoJson);
+        if (joinArg && !window.LivekitClient) {
+          throw new Error('LiveKit SDK failed to load (LivekitClient global missing).');
+        }
+        const singlePlayer = !joinArg ? getSinglePlayerParamsFromUrl() : null;
+
+        // Multiplayer path: ?q/?g. Single player path: ?iwad (+ optional ?pwad/?warp).
+        if (!joinArg && !singlePlayer) {
+          throw new Error('missing game id (use ?q=<uuid>)');
+        }
+
+        let iwadId = null;
+        let pwadIds = [];
+        let warpMap = null;
+        let wadIds = [];
+
+        if (joinArg) {
+          // Before attempting to initialize the game or connect over WebRTC,
+          // fetch game info (routed to the master crate; response is a GameSummary JSON).
+          const gameId = getGameIdForInfoOrThrow(joinArg);
+          const gameInfoJson = await fetchGameInfo(gameId);
+          wadIds = extractWadIdsFromGameInfoJson(gameInfoJson);
+
+          // Determine IWAD vs PWAD IDs based on game info (prefer root.*; fallback info.*).
+          const root = gameInfoJson && typeof gameInfoJson === 'object' ? gameInfoJson : {};
+          const infoObj = root.info && typeof root.info === 'object' ? root.info : null;
+          iwadId = (typeof root.iwad === 'string' && root.iwad) ? root.iwad
+            : (infoObj && typeof infoObj.iwad === 'string' ? infoObj.iwad : null);
+          pwadIds = Array.isArray(root.files) ? root.files
+            : (infoObj && Array.isArray(infoObj.files) ? infoObj.files : []);
+
+          if (!iwadId) {
+            throw new Error('game info missing iwad UUID');
+          }
+        } else {
+          iwadId = singlePlayer.iwadId;
+          pwadIds = singlePlayer.pwadIds;
+          warpMap = singlePlayer.warp;
+          wadIds = [iwadId, ...pwadIds];
+        }
+
         const wadUrlsResp = await resolveWadUrls(wadIds);
 
         // Map wad_id -> url for fast lookup.
@@ -928,16 +1009,8 @@
           }
         }
 
-        // Determine IWAD vs PWAD IDs based on game info (prefer root.*; fallback info.*).
-        const root = gameInfoJson && typeof gameInfoJson === 'object' ? gameInfoJson : {};
-        const infoObj = root.info && typeof root.info === 'object' ? root.info : null;
-        const iwadId = (typeof root.iwad === 'string' && root.iwad) ? root.iwad
-          : (infoObj && typeof infoObj.iwad === 'string' ? infoObj.iwad : null);
-        const pwadIds = Array.isArray(root.files) ? root.files
-          : (infoObj && Array.isArray(infoObj.files) ? infoObj.files : []);
-
         if (!iwadId) {
-          throw new Error('game info missing iwad UUID');
+          throw new Error('missing iwad UUID');
         }
 
         // Download + decompress all required WADs before starting the engine.
@@ -981,11 +1054,19 @@
           }
         }
 
-        setHud('Joining room…');
-        const { token, url } = await join(joinArg);
+        // LiveKit is only required for the multiplayer (?q/?g) path.
+        let room = null;
+        let token = null;
+        let url = null;
+        if (joinArg) {
+          setHud('Joining room…');
+          const joined = await join(joinArg);
+          token = joined.token;
+          url = joined.url;
 
-        setHud('Connecting WebRTC…');
-        const room = new LivekitClient.Room({});
+          setHud('Connecting WebRTC…');
+          room = new LivekitClient.Room({});
+        }
 
         // Promise that resolves on the first user gesture.
         let resolveFirstGesture;
@@ -1011,7 +1092,7 @@
 
           // LiveKit audio (optional).
           try {
-            await room.startAudio?.();
+            await room?.startAudio?.();
           } catch (_) {}
 
           // SDL/WebAudio (Emscripten): best-effort resume.
@@ -1413,7 +1494,7 @@
         };
 
         function publishUdp(u8, reliable) {
-          if (!room || !room.localParticipant) return false;
+          if (!room || !room.localParticipant || !window.LivekitClient) return false;
           const dest = ['server'];
 
           // Preferred signature (LK v2): publishData(data, { reliable, topic, destinationIdentities })
@@ -1454,20 +1535,22 @@
           }
         }
 
-        room.on(LivekitClient.RoomEvent.DataReceived, (payload, participant, kind, topic) => {
-          // Some LiveKit publishData overloads may omit topic on the receiver.
-          // Treat missing topic as UDP for this app.
-          if (topic && topic !== 'udp') return;
-          if ((participant?.identity ?? '') !== 'server') return;
-          // payload is Uint8Array
-          udpQueue.push(payload);
-          stats.lkRecv++;
-        });
+        if (room) {
+          room.on(LivekitClient.RoomEvent.DataReceived, (payload, participant, kind, topic) => {
+            // Some LiveKit publishData overloads may omit topic on the receiver.
+            // Treat missing topic as UDP for this app.
+            if (topic && topic !== 'udp') return;
+            if ((participant?.identity ?? '') !== 'server') return;
+            // payload is Uint8Array
+            udpQueue.push(payload);
+            stats.lkRecv++;
+          });
 
-        // Start immediately; browsers may still require a gesture for audio and pointer lock,
-        // but the game can load and run without blocking on a click.
-        setHud('Connecting WebRTC…');
-        await room.connect(url, token);
+          // Start immediately; browsers may still require a gesture for audio and pointer lock,
+          // but the game can load and run without blocking on a click.
+          setHud('Connecting WebRTC…');
+          await room.connect(url, token);
+        }
 
         const debugEnabled = getParam('debug') === '1';
 
@@ -1478,7 +1561,7 @@
 
         // Debug-only: verify that LiveKit data packets reach the server/proxy
         // even if the engine never calls into the UDP bridge.
-        if (debugEnabled) {
+        if (debugEnabled && room) {
           try {
             const bytes = new TextEncoder().encode('zan-debug-ping');
             const ok = publishUdp(bytes, true);
@@ -1673,8 +1756,9 @@
         // visualViewport helps on mobile where the URL bar affects layout.
         window.visualViewport?.addEventListener('resize', () => scheduleResize(zand));
 
-        // Kick off the engine in client mode. The IP is a dummy; UDP is bridged over WebRTC.
-        // Use the downloaded IWAD/PWADs we wrote into the Emscripten FS.
+        // Kick off the engine.
+        // Multiplayer: use -connect and bridge UDP over WebRTC.
+        // Single-player: omit -connect and run locally.
         console.log('pwadPaths:', pwadPaths);
         try {
           const args = [];
@@ -1688,11 +1772,14 @@
             args.push('+set', 'name', String(overrideName));
           }
 
+          if (joinArg) {
+            // The IP is a dummy; UDP is bridged over WebRTC.
+            args.push('-connect', '127.0.0.1');
+          }
+
+          // Default volumes in Zandronum are pretty loud for the web client.
+          // Users can still override these in the in-game menus.
           args.push(
-            '-connect',
-            '127.0.0.1',
-            // Default volumes in Zandronum are pretty loud for the web client.
-            // Users can still override these in the in-game menus.
             '+set',
             'snd_sfxvolume',
             '0.25',
@@ -1700,6 +1787,10 @@
             'snd_musicvolume',
             '0.25',
           );
+
+          if (warpMap) {
+            args.push('+map', String(warpMap));
+          }
           console.log('Starting Zandronum with args:', args);
           zand.callMain(args);
         } catch (e) {
