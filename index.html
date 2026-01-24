@@ -1631,21 +1631,22 @@
           throw e;
         }
 
-        // Optional: write user-provided config and point Zandronum at it.
-        const configText = dorchSettings && typeof dorchSettings.config === 'string' ? dorchSettings.config : '';
-        const configPath = configText && String(configText).trim()
-          ? '/home/web_user/.config/dorch/zdoom.cfg'
+        // Optional: LS_CONFIG_KEY stores an autoexec.cfg. Put it where Zandronum expects it.
+        // On Unix this resolves to ~/.config/zandronum/autoexec.cfg (see M_GetAutoexecPath/GetUserFile).
+        const autoexecText = dorchSettings && typeof dorchSettings.config === 'string' ? dorchSettings.config : '';
+        const autoexecPath = autoexecText && String(autoexecText).trim()
+          ? '/home/web_user/.config/zandronum/autoexec.cfg'
           : null;
-        if (configPath) {
+        if (autoexecPath) {
           try {
             try { zand.FS.mkdir('/home'); } catch (_) {}
             try { zand.FS.mkdir('/home/web_user'); } catch (_) {}
             try { zand.FS.mkdir('/home/web_user/.config'); } catch (_) {}
-            try { zand.FS.mkdir('/home/web_user/.config/dorch'); } catch (_) {}
-            zand.FS.writeFile(configPath, new TextEncoder().encode(String(configText)));
-            console.log('Wrote overridden config at', configPath);
+            try { zand.FS.mkdir('/home/web_user/.config/zandronum'); } catch (_) {}
+            zand.FS.writeFile(autoexecPath, new TextEncoder().encode(String(autoexecText)));
+            console.log('Wrote overridden autoexec.cfg at', autoexecPath);
           } catch (e) {
-            console.warn('Failed to write overridden config:', e);
+            console.warn('Failed to write overridden autoexec.cfg:', e);
           }
         }
 
@@ -1677,9 +1678,6 @@
         console.log('pwadPaths:', pwadPaths);
         try {
           const args = [];
-          if (configPath) {
-            args.push('-config', configPath);
-          }
           args.push('-iwad', iwadPath);
           for (const p of pwadPaths) {
             args.push('-file', p);
