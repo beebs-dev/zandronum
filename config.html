@@ -1,0 +1,656 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Dorch Config</title>
+		<style>
+			:root {
+				--bg: #0b0d12;
+				--panel: rgba(255,255,255,0.06);
+				--panel2: rgba(255,255,255,0.08);
+				--text: rgba(255,255,255,0.92);
+				--muted: rgba(255,255,255,0.70);
+				--border: rgba(255,255,255,0.14);
+				--border2: rgba(255,255,255,0.20);
+				--accent: #6aa6ff;
+				--danger: #ff4d6d;
+				--ok: #3ad29f;
+				--mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+				--sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+			}
+
+			html, body {
+				margin: 0;
+				padding: 0;
+				background: radial-gradient(1200px 800px at 70% 10%, rgba(106,166,255,0.15), transparent 55%),
+										radial-gradient(900px 700px at 15% 40%, rgba(58,210,159,0.12), transparent 55%),
+										var(--bg);
+				color: var(--text);
+				font-family: var(--sans);
+			}
+
+			a { color: var(--accent); text-decoration: none; }
+			a:hover { text-decoration: underline; }
+
+			.wrap {
+				max-width: 980px;
+				margin: 28px auto;
+				padding: 0 16px 48px;
+			}
+
+			header {
+				display: flex;
+				flex-wrap: wrap;
+				align-items: baseline;
+				gap: 10px 16px;
+				margin: 10px 0 18px;
+			}
+
+			h1 {
+				margin: 0;
+				font-size: 20px;
+				letter-spacing: 0.02em;
+			}
+
+			.sub {
+				color: var(--muted);
+				font-size: 13px;
+			}
+
+			.grid {
+				display: grid;
+				grid-template-columns: 1fr;
+				gap: 16px;
+			}
+
+			@media (min-width: 900px) {
+				.grid { grid-template-columns: 1.2fr 0.8fr; }
+			}
+
+			.card {
+				border: 1px solid var(--border);
+				background: var(--panel);
+				border-radius: 16px;
+				padding: 14px;
+				box-shadow: 0 18px 50px rgba(0,0,0,0.35);
+				backdrop-filter: blur(10px);
+			}
+
+			.card h2 {
+				margin: 0 0 10px;
+				font-size: 14px;
+				letter-spacing: 0.06em;
+				text-transform: uppercase;
+				color: rgba(255,255,255,0.88);
+			}
+
+			.row {
+				display: flex;
+				gap: 10px;
+				flex-wrap: wrap;
+				align-items: center;
+			}
+
+			.row > * { flex: 0 0 auto; }
+
+			input[type="file"], input[type="text"], textarea {
+				width: 100%;
+				border-radius: 12px;
+				border: 1px solid var(--border);
+				background: rgba(0,0,0,0.35);
+				color: var(--text);
+				padding: 10px 12px;
+				outline: none;
+			}
+
+			input[type="text"] { font-family: var(--mono); }
+
+			textarea {
+				font-family: var(--mono);
+				resize: vertical;
+				min-height: 68px;
+			}
+
+			.btn {
+				border: 1px solid var(--border2);
+				background: var(--panel2);
+				color: var(--text);
+				border-radius: 12px;
+				padding: 9px 12px;
+				font: 700 12px var(--mono);
+				letter-spacing: 0.06em;
+				text-transform: uppercase;
+				cursor: pointer;
+			}
+
+			.btn:hover { filter: brightness(1.08); }
+			.btn:active { transform: translateY(1px); }
+			.btn.primary { border-color: rgba(106,166,255,0.55); background: rgba(106,166,255,0.18); }
+			.btn.danger { border-color: rgba(255,77,109,0.55); background: rgba(255,77,109,0.16); }
+
+			.hint {
+				color: var(--muted);
+				font-size: 12px;
+				line-height: 1.35;
+			}
+
+			.status {
+				font-family: var(--mono);
+				font-size: 12px;
+				color: rgba(255,255,255,0.80);
+				margin-top: 10px;
+				white-space: pre-wrap;
+			}
+
+			table {
+				width: 100%;
+				border-collapse: collapse;
+				font-family: var(--mono);
+				font-size: 12px;
+			}
+
+			thead th {
+				text-align: left;
+				color: rgba(255,255,255,0.75);
+				font-weight: 800;
+				padding: 8px 8px;
+				border-bottom: 1px solid var(--border);
+			}
+
+			tbody td {
+				padding: 8px 8px;
+				border-bottom: 1px solid rgba(255,255,255,0.06);
+				vertical-align: top;
+			}
+
+			.pill {
+				display: inline-flex;
+				align-items: center;
+				gap: 8px;
+				border: 1px solid var(--border);
+				border-radius: 999px;
+				padding: 6px 10px;
+				background: rgba(0,0,0,0.22);
+			}
+
+			.pill label { cursor: pointer; }
+			.pill input { cursor: pointer; }
+
+			.ok { color: var(--ok); }
+			.dangerText { color: var(--danger); }
+
+			.mono { font-family: var(--mono); }
+			.right { margin-left: auto; }
+		</style>
+	</head>
+	<body>
+		<div class="wrap">
+			<header>
+				<h1>Dorch Config</h1>
+				<div class="sub">Upload WAD/PK3 to IndexedDB and generate an <span class="mono">index.html</span> launch URL.</div>
+				<div class="right sub"><a href="./index.html">Open index.html</a></div>
+			</header>
+
+			<div class="grid">
+				<section class="card">
+					<h2>Library</h2>
+
+					<div class="row">
+						<input id="fileInput" type="file" multiple
+							accept=".wad,.pk3,.pk7,.ipk3,.zip,.7z,.gz,application/octet-stream" />
+						<button id="btnUpload" class="btn primary">Upload to IDB</button>
+						<button id="btnRefresh" class="btn">Refresh</button>
+						<button id="btnClear" class="btn danger">Delete All</button>
+					</div>
+					<div class="hint" style="margin-top:10px;">
+						Files are stored locally in your browser (IndexedDB) under the database <span class="mono">dorch.settings</span>.
+						Nothing is uploaded to a server.
+					</div>
+
+					<div style="margin-top:12px; overflow:auto;">
+						<table>
+							<thead>
+								<tr>
+									<th style="width:64px;">IWAD</th>
+									<th style="width:64px;">PWAD</th>
+									<th>Name</th>
+									<th style="width:90px;">Size</th>
+									<th style="width:320px;">ID</th>
+									<th style="width:160px;">Actions</th>
+								</tr>
+							</thead>
+							<tbody id="wadRows"></tbody>
+						</table>
+					</div>
+
+					<div id="status" class="status"></div>
+				</section>
+
+				<section class="card">
+					<h2>Launch</h2>
+
+					<div class="hint">Pick an IWAD (required), optional PWADs, and a warp like <span class="mono">MAP01</span> or <span class="mono">E1M1</span>.</div>
+
+					<div style="margin-top:10px;">
+						<label class="hint" for="warpInput">Warp</label>
+						<input id="warpInput" type="text" placeholder="MAP01" />
+					</div>
+
+					<div style="margin-top:10px;">
+						<label class="hint" for="launchUrl">Launch URL</label>
+						<textarea id="launchUrl" readonly></textarea>
+					</div>
+
+					<div class="row" style="margin-top:10px;">
+						<button id="btnCopy" class="btn">Copy URL</button>
+						<a id="btnOpen" class="btn primary" href="./index.html">Open</a>
+					</div>
+
+					<div class="hint" style="margin-top:10px;">
+						This uses <span class="mono">?iwad=&lt;uuid&gt;</span>, optional <span class="mono">?pwad=&lt;uuid,uuid&gt;</span>, and optional <span class="mono">?warp=&lt;map&gt;</span>.
+					</div>
+				</section>
+			</div>
+		</div>
+
+		<script>
+			// Shared constants with index.html
+			const IDB_DB_NAME = 'dorch.settings';
+			const IDB_STORE_FILES = 'files';
+			const IDB_DOOM2_KEY = 'doom2_override';
+
+			const LS_IWAD = 'dorch.config.iwad';
+			const LS_PWADS = 'dorch.config.pwads';
+			const LS_WARP = 'dorch.config.warp';
+
+			const $ = (id) => document.getElementById(id);
+
+			function logStatus(msg) {
+				const el = $('status');
+				const now = new Date().toISOString().replace('T', ' ').replace('Z', '');
+				el.textContent = `[${now}] ${msg}\n` + el.textContent;
+			}
+
+			function formatBytes(n) {
+				const num = Number(n) || 0;
+				const units = ['B', 'KB', 'MB', 'GB'];
+				let v = num;
+				let i = 0;
+				while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+				const d = i === 0 ? 0 : 1;
+				return `${v.toFixed(d)} ${units[i]}`;
+			}
+
+			function extFromName(name) {
+				const s = String(name || '');
+				const dot = s.lastIndexOf('.');
+				if (dot < 0 || dot === s.length - 1) return null;
+				const ext = s.slice(dot).toLowerCase();
+				if (!/^\.[a-z0-9]{1,8}$/.test(ext)) return null;
+				return ext;
+			}
+
+			function normalizeUuid(id) {
+				return String(id || '').trim().toLowerCase();
+			}
+
+			function openSettingsDb() {
+				return new Promise((resolve, reject) => {
+					if (typeof indexedDB === 'undefined') {
+						reject(new Error('indexedDB missing'));
+						return;
+					}
+					const req = indexedDB.open(IDB_DB_NAME, 1);
+					req.onupgradeneeded = () => {
+						const db = req.result;
+						if (!db.objectStoreNames.contains(IDB_STORE_FILES)) {
+							db.createObjectStore(IDB_STORE_FILES);
+						}
+					};
+					req.onsuccess = () => resolve(req.result);
+					req.onerror = () => reject(req.error);
+				});
+			}
+
+			async function idbPutFile(key, value) {
+				const db = await openSettingsDb();
+				try {
+					return await new Promise((resolve, reject) => {
+						const tx = db.transaction(IDB_STORE_FILES, 'readwrite');
+						tx.onerror = () => reject(tx.error);
+						tx.oncomplete = () => resolve();
+						const req = tx.objectStore(IDB_STORE_FILES).put(value, key);
+						req.onerror = () => reject(req.error);
+					});
+				} finally {
+					try { db.close(); } catch (_) {}
+				}
+			}
+
+			async function idbDelete(key) {
+				const db = await openSettingsDb();
+				try {
+					return await new Promise((resolve, reject) => {
+						const tx = db.transaction(IDB_STORE_FILES, 'readwrite');
+						tx.onerror = () => reject(tx.error);
+						tx.oncomplete = () => resolve();
+						const req = tx.objectStore(IDB_STORE_FILES).delete(key);
+						req.onerror = () => reject(req.error);
+					});
+				} finally {
+					try { db.close(); } catch (_) {}
+				}
+			}
+
+			async function idbGetAllEntries() {
+				const db = await openSettingsDb();
+				try {
+					return await new Promise((resolve, reject) => {
+						const tx = db.transaction(IDB_STORE_FILES, 'readonly');
+						tx.onerror = () => reject(tx.error);
+						const store = tx.objectStore(IDB_STORE_FILES);
+
+						// Some older browsers might not support getAll/getAllKeys; fall back to cursor.
+						if (typeof store.getAll === 'function' && typeof store.getAllKeys === 'function') {
+							const reqAll = store.getAll();
+							const reqKeys = store.getAllKeys();
+							let all = null;
+							let keys = null;
+							const finish = () => {
+								if (!all || !keys) return;
+								const out = [];
+								for (let i = 0; i < Math.min(all.length, keys.length); i++) {
+									out.push({ key: String(keys[i]), value: all[i] });
+								}
+								resolve(out);
+							};
+							reqAll.onsuccess = () => { all = reqAll.result || []; finish(); };
+							reqKeys.onsuccess = () => { keys = reqKeys.result || []; finish(); };
+							reqAll.onerror = () => reject(reqAll.error);
+							reqKeys.onerror = () => reject(reqKeys.error);
+							return;
+						}
+
+						const out = [];
+						const req = store.openCursor();
+						req.onerror = () => reject(req.error);
+						req.onsuccess = () => {
+							const cur = req.result;
+							if (!cur) { resolve(out); return; }
+							out.push({ key: String(cur.key), value: cur.value });
+							cur.continue();
+						};
+					});
+				} finally {
+					try { db.close(); } catch (_) {}
+				}
+			}
+
+			function loadSelection() {
+				const iwad = normalizeUuid(localStorage.getItem(LS_IWAD) || '');
+				const pwads = (() => {
+					try {
+						const raw = JSON.parse(localStorage.getItem(LS_PWADS) || '[]');
+						if (!Array.isArray(raw)) return [];
+						return raw.map(normalizeUuid).filter(Boolean);
+					} catch {
+						return [];
+					}
+				})();
+				const warp = String(localStorage.getItem(LS_WARP) || '').trim();
+				return { iwad: iwad || null, pwads, warp: warp || null };
+			}
+
+			function saveSelection(sel) {
+				try {
+					localStorage.setItem(LS_IWAD, sel.iwad || '');
+					localStorage.setItem(LS_PWADS, JSON.stringify(sel.pwads || []));
+					localStorage.setItem(LS_WARP, sel.warp || '');
+				} catch (_) {
+					// ignore
+				}
+			}
+
+			function buildLaunchUrl(sel) {
+				const u = new URL('./index.html', window.location.href);
+				if (sel.iwad) u.searchParams.set('iwad', sel.iwad);
+				if (sel.pwads && sel.pwads.length) u.searchParams.set('pwad', sel.pwads.join(','));
+				if (sel.warp) u.searchParams.set('warp', sel.warp);
+				return u.toString();
+			}
+
+			function updateLaunchUi(sel) {
+				if (!sel) sel = loadSelection();
+				const url = buildLaunchUrl(sel);
+				$('launchUrl').value = url;
+				$('btnOpen').href = url;
+			}
+
+			async function refreshLibrary() {
+				const sel = loadSelection();
+				$('warpInput').value = sel.warp || '';
+
+				const rows = $('wadRows');
+				rows.innerHTML = '';
+
+				let entries = [];
+				try {
+					entries = await idbGetAllEntries();
+				} catch (e) {
+					logStatus(`ERROR: failed to read IndexedDB: ${e && e.message ? e.message : e}`);
+					updateLaunchUi(sel);
+					return;
+				}
+
+				// Only show our WAD-like entries; ignore internal keys like doom2_override.
+				const wads = entries
+					.filter((e) => e && e.key && e.key !== IDB_DOOM2_KEY)
+					.map((e) => {
+						const v = e.value && typeof e.value === 'object' ? e.value : {};
+						return {
+							id: normalizeUuid(e.key),
+							name: typeof v.name === 'string' ? v.name : '(unnamed)',
+							size: typeof v.size === 'number' ? v.size : null,
+							ext: typeof v.ext === 'string' ? v.ext : (extFromName(v.name) || '.wad'),
+							addedAt: typeof v.addedAt === 'number' ? v.addedAt : 0,
+						};
+					})
+					.sort((a, b) => (b.addedAt - a.addedAt) || a.name.localeCompare(b.name));
+
+				for (const wad of wads) {
+					const tr = document.createElement('tr');
+
+					// IWAD radio
+					const tdIwad = document.createElement('td');
+					const iwadWrap = document.createElement('span');
+					iwadWrap.className = 'pill';
+					const iwadRadio = document.createElement('input');
+					iwadRadio.type = 'radio';
+					iwadRadio.name = 'iwad';
+					iwadRadio.checked = sel.iwad === wad.id;
+					iwadRadio.addEventListener('change', () => {
+						const cur = loadSelection();
+						cur.iwad = wad.id;
+						saveSelection(cur);
+						updateLaunchUi(cur);
+					});
+					const iwadLbl = document.createElement('label');
+					iwadLbl.textContent = 'IWAD';
+					iwadWrap.appendChild(iwadRadio);
+					iwadWrap.appendChild(iwadLbl);
+					tdIwad.appendChild(iwadWrap);
+
+					// PWAD checkbox
+					const tdPwad = document.createElement('td');
+					const pwadWrap = document.createElement('span');
+					pwadWrap.className = 'pill';
+					const pwadCb = document.createElement('input');
+					pwadCb.type = 'checkbox';
+					pwadCb.checked = sel.pwads.includes(wad.id);
+					pwadCb.addEventListener('change', () => {
+						const cur = loadSelection();
+						const has = cur.pwads.includes(wad.id);
+						cur.pwads = has ? cur.pwads.filter((x) => x !== wad.id) : [...cur.pwads, wad.id];
+						saveSelection(cur);
+						updateLaunchUi(cur);
+					});
+					const pwadLbl = document.createElement('label');
+					pwadLbl.textContent = 'PWAD';
+					pwadWrap.appendChild(pwadCb);
+					pwadWrap.appendChild(pwadLbl);
+					tdPwad.appendChild(pwadWrap);
+
+					const tdName = document.createElement('td');
+					tdName.textContent = wad.name;
+
+					const tdSize = document.createElement('td');
+					tdSize.textContent = wad.size != null ? formatBytes(wad.size) : '';
+
+					const tdId = document.createElement('td');
+					tdId.textContent = wad.id;
+
+					const tdAct = document.createElement('td');
+					const btnCopyId = document.createElement('button');
+					btnCopyId.className = 'btn';
+					btnCopyId.textContent = 'Copy ID';
+					btnCopyId.addEventListener('click', async () => {
+						try {
+							await navigator.clipboard.writeText(wad.id);
+							logStatus(`Copied ID: ${wad.id}`);
+						} catch {
+							// Fallback
+							const tmp = document.createElement('textarea');
+							tmp.value = wad.id;
+							document.body.appendChild(tmp);
+							tmp.select();
+							document.execCommand('copy');
+							tmp.remove();
+							logStatus(`Copied ID: ${wad.id}`);
+						}
+					});
+
+					const btnDel = document.createElement('button');
+					btnDel.className = 'btn danger';
+					btnDel.textContent = 'Delete';
+					btnDel.addEventListener('click', async () => {
+						if (!confirm(`Delete ${wad.name}?`)) return;
+						await idbDelete(wad.id);
+						const cur = loadSelection();
+						if (cur.iwad === wad.id) cur.iwad = null;
+						cur.pwads = cur.pwads.filter((x) => x !== wad.id);
+						saveSelection(cur);
+						logStatus(`Deleted: ${wad.name}`);
+						await refreshLibrary();
+					});
+
+					tdAct.appendChild(btnCopyId);
+					tdAct.appendChild(document.createTextNode(' '));
+					tdAct.appendChild(btnDel);
+
+					tr.appendChild(tdIwad);
+					tr.appendChild(tdPwad);
+					tr.appendChild(tdName);
+					tr.appendChild(tdSize);
+					tr.appendChild(tdId);
+					tr.appendChild(tdAct);
+					rows.appendChild(tr);
+				}
+
+				updateLaunchUi(sel);
+			}
+
+			async function uploadSelectedFiles() {
+				const input = $('fileInput');
+				const files = Array.from(input.files || []);
+				if (!files.length) {
+					logStatus('No files selected.');
+					return;
+				}
+				if (!window.crypto || typeof crypto.randomUUID !== 'function') {
+					logStatus('ERROR: crypto.randomUUID() missing; cannot generate IDs.');
+					return;
+				}
+
+				$('btnUpload').disabled = true;
+				try {
+					for (const f of files) {
+						const id = normalizeUuid(crypto.randomUUID());
+						const buf = await f.arrayBuffer();
+						const rec = {
+							kind: 'wad',
+							name: f.name,
+							size: f.size,
+							type: f.type || 'application/octet-stream',
+							ext: extFromName(f.name) || '.wad',
+							addedAt: Date.now(),
+							data: buf,
+						};
+						await idbPutFile(id, rec);
+						logStatus(`Uploaded ${f.name} -> ${id}`);
+					}
+					input.value = '';
+					await refreshLibrary();
+				} catch (e) {
+					logStatus(`ERROR: upload failed: ${e && e.message ? e.message : e}`);
+				} finally {
+					$('btnUpload').disabled = false;
+				}
+			}
+
+			async function clearAll() {
+				if (!confirm('Delete ALL stored files from IndexedDB?')) return;
+				const entries = await idbGetAllEntries();
+				for (const e of entries) {
+					if (!e || !e.key) continue;
+					if (String(e.key) === IDB_DOOM2_KEY) continue; // leave internal override alone
+					await idbDelete(String(e.key));
+				}
+				saveSelection({ iwad: null, pwads: [], warp: null });
+				logStatus('Deleted all stored files.');
+				await refreshLibrary();
+			}
+
+			function installHandlers() {
+				$('btnUpload').addEventListener('click', uploadSelectedFiles);
+				$('btnRefresh').addEventListener('click', refreshLibrary);
+				$('btnClear').addEventListener('click', clearAll);
+
+				$('warpInput').addEventListener('input', () => {
+					const cur = loadSelection();
+					const w = String($('warpInput').value || '').trim();
+					cur.warp = w ? w : null;
+					saveSelection(cur);
+					updateLaunchUi(cur);
+				});
+
+				$('btnCopy').addEventListener('click', async () => {
+					const txt = $('launchUrl').value || '';
+					if (!txt) return;
+					try {
+						await navigator.clipboard.writeText(txt);
+						logStatus('Copied launch URL.');
+					} catch {
+						const tmp = document.createElement('textarea');
+						tmp.value = txt;
+						document.body.appendChild(tmp);
+						tmp.select();
+						document.execCommand('copy');
+						tmp.remove();
+						logStatus('Copied launch URL.');
+					}
+				});
+			}
+
+			(async () => {
+				installHandlers();
+				try {
+					await refreshLibrary();
+					logStatus('Ready.');
+				} catch (e) {
+					logStatus(`ERROR: ${e && e.message ? e.message : e}`);
+				}
+			})();
+		</script>
+	</body>
+</html>

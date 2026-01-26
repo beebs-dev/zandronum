@@ -807,6 +807,35 @@
         }
       }
 
+      function coerceToUint8(data) {
+        if (!data) return null;
+        try {
+          if (data instanceof Uint8Array) return data;
+          if (data instanceof ArrayBuffer) return new Uint8Array(data);
+          if (data && data.buffer instanceof ArrayBuffer) {
+            const offset = Number(data.byteOffset) || 0;
+            const len = Number(data.byteLength) || (data.buffer.byteLength - offset);
+            return new Uint8Array(data.buffer, offset, len);
+          }
+        } catch (_) {
+          // ignore
+        }
+        return null;
+      }
+
+      function inferExtensionFromName(name) {
+        try {
+          const s = String(name || '');
+          const dot = s.lastIndexOf('.');
+          if (dot < 0 || dot === s.length - 1) return null;
+          const ext = s.slice(dot).toLowerCase();
+          if (/^\.[a-z0-9]{1,8}$/.test(ext)) return ext;
+        } catch (_) {
+          // ignore
+        }
+        return null;
+      }
+
       function openSettingsDb() {
         return new Promise((resolve, reject) => {
           if (typeof indexedDB === 'undefined') {
@@ -863,14 +892,8 @@
         try {
           const rec = await idbGetFile(IDB_DOOM2_KEY);
           const data = rec && typeof rec === 'object' ? rec.data : null;
-          if (data instanceof ArrayBuffer) {
-            out.doom2OverrideBytes = new Uint8Array(data);
-          } else if (data && data.buffer instanceof ArrayBuffer) {
-            // Typed array / DataView
-            const offset = Number(data.byteOffset) || 0;
-            const len = Number(data.byteLength) || (data.buffer.byteLength - offset);
-            out.doom2OverrideBytes = new Uint8Array(data.buffer, offset, len);
-          }
+          const u8 = coerceToUint8(data);
+          if (u8 && u8.length) out.doom2OverrideBytes = u8;
         } catch (_) {
           // ignore
         }
@@ -1007,7 +1030,44 @@
           wadIds = [iwadId, ...pwadIds];
         }
 
-        const wadUrlsResp = await resolveWadUrls(wadIds);
+        if (!iwadId) {
+          throw new Error('missing iwad UUID');
+        }
+
+        // If user provided a doom2.wad override, replace freedoom2.wad (specific IWAD ID) with it.
+        const doom2OverrideBytes = dorchSettings && dorchSettings.doom2OverrideBytes;
+        const hasDoom2Override = (iwadId === FREEDOOM2_IWAD_ID)
+          && doom2OverrideBytes && doom2OverrideBytes.length;
+
+        const allIds = [iwadId, ...pwadIds];
+
+        // Attempt to load any requested WADs from IndexedDB first.
+        const idbRecByWadId = new Map();
+        try {
+          await Promise.all(allIds.map(async (id) => {
+            try {
+              const rec = await idbGetFile(id);
+              if (rec && typeof rec === 'object' && rec.data) {
+                idbRecByWadId.set(id, rec);
+              }
+            } catch (_) {
+              // ignore per-file
+            }
+          }));
+        } catch (_) {
+          // ignore
+        }
+
+        // Only resolve remote URLs for IDs that are not present in IDB.
+        const missingIds = allIds.filter((id) => {
+          if (id === iwadId && hasDoom2Override) return false;
+          return !idbRecByWadId.has(id);
+        });
+
+        let wadUrlsResp = { items: [] };
+        if (missingIds.length) {
+          wadUrlsResp = await resolveWadUrls(missingIds);
+        }
 
         // Map wad_id -> url for fast lookup.
         const urlByWadId = new Map();
@@ -1017,20 +1077,10 @@
           }
         }
 
-        if (!iwadId) {
-          throw new Error('missing iwad UUID');
-        }
-
         // Download + decompress all required WADs before starting the engine.
         setHud('Downloading WADs…');
         let wadBytesById = new Map();
         const wadPathById = new Map();
-        const allIds = [iwadId, ...pwadIds];
-
-        // If user provided a doom2.wad override, replace freedoom2.wad (specific IWAD ID) with it.
-        const doom2OverrideBytes = dorchSettings && dorchSettings.doom2OverrideBytes;
-        const hasDoom2Override = (iwadId === FREEDOOM2_IWAD_ID)
-          && doom2OverrideBytes && doom2OverrideBytes.length;
 
         for (const id of allIds) {
           if (id === iwadId && hasDoom2Override) {
@@ -1039,6 +1089,21 @@
             console.log('Using doom2_override for IWAD id=', id);
             continue;
           }
+
+          const idbRec = idbRecByWadId.get(id);
+          if (idbRec) {
+            const u8 = coerceToUint8(idbRec.data);
+            if (!u8 || !u8.length) {
+              throw new Error(`IndexedDB entry for wad_id=${id} had no data`);
+            }
+            wadBytesById.set(id, u8);
+            const ext = (typeof idbRec.ext === 'string' ? String(idbRec.ext) : null)
+              || inferExtensionFromName(idbRec.name)
+              || '.wad';
+            wadPathById.set(id, `/wads/${id}${ext.startsWith('.') ? ext : ('.' + ext)}`);
+            continue;
+          }
+
           const url = urlByWadId.get(id);
           if (!url) {
             throw new Error(`missing resolved URL for wad_id=${id}`);

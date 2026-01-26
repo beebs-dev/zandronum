@@ -44,20 +44,13 @@ echo "IWAD SHA256: $(sha256sum "$IWAD_PATH" || true)"
 
 SERVER=(
   /opt/zandronum/zandronum-server
+  -config /server.ini
   -iwad "iwad.wad"
   -skill ${SKILL:-3}
   +map ${WARP:-"MAP01"}
-  +sv_mapvote 1
-  +sv_mapvote_showlist 1
-  +sv_mapvote_ratio 0.51
-  +sv_mapvote_timeout 10
   +sv_coop_damagefactor 1.0
   +sv_defaultdmflags 0
-  +sv_maxplayers 8
-  +sv_pure false
   +sv_maxclientsperip 0
-  +sv_maxclienttries 9999
-  +sv_rejectmessagekicktime 0
   +sv_maxplayers $MAX_PLAYERS
   +sv_doubleammo 1
   +sv_weaponstay 1
