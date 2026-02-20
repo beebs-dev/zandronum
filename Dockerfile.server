@@ -1,4 +1,5 @@
 FROM debian:bookworm AS build
+ENV SCCACHE_SERVER_PORT=4373
 
 ARG DEBIAN_FRONTEND=noninteractive
 
