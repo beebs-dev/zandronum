@@ -4,14 +4,25 @@ RESOLVE_SCRIPT_PATH=$(dirname "$0")/resolve-by-id.sh
 echo "Game ID: ${GAME_ID:-unset}"
 echo "Server Name: ${SERVER_NAME:-Zandronum Server}"
 echo "Using IWAD_ID: $IWAD_ID"
+echo "Using Game Mode: ${GAMEMODE:-unset}"
 echo "Warp Level: ${WARP:-unset}"
 echo "Using Game Skill: ${SKILL:-unset}"
 echo "Using Data Root: ${DATA_ROOT:-unset}"
+echo "Using Map Rotation: ${ROTATION:-unset}"
+echo "Using Random Rotation: ${ROTATION_RANDOM:-unset}"
+#echo "Deathmatch mode: ${DEATHMATCH:-unset}"
+#echo "Cooperative mode: ${COOPERATIVE:-unset}"
+#echo "Teamplay mode: ${TEAMPLAY:-unset}"
+#echo "Duel mode: ${DUEL:-unset}"
 
 MAX_PLAYERS=${MAX_PLAYERS:-32}
 echo "Using Max Players: $MAX_PLAYERS"
 
 cd "$DATA_ROOT"
+
+if [[ -n "${ROTATION:-}" ]]; then
+    printf "%s\n" "$ROTATION" > /opt/zandronum/rotation.txt
+fi
 
 resolve_by_id() {
   "$RESOLVE_SCRIPT_PATH" $DATA_ROOT "$1"
@@ -51,12 +62,32 @@ SERVER=(
   +sv_coop_damagefactor 1.0
   +sv_defaultdmflags 0
   +sv_maxclientsperip 0
-  +sv_maxplayers $MAX_PLAYERS
+  +sv_maxplayers "$MAX_PLAYERS"
   +sv_doubleammo 1
   +sv_weaponstay 1
   +sv_itemrespawn 1
   +sv_hostname "$SERVER_NAME"
 )
+
+case "${GAMEMODE:-0}" in
+    0)
+        SERVER+=( +cooperative 1 )
+        ;;
+    3)
+        SERVER+=( +deathmatch 1 )
+        ;;
+    *)
+        SERVER+=( +deathmatch 1 )
+        ;;
+esac
+
+if [[ -n "${ROTATION:-}" ]]; then
+  SERVER+=( +sv_maprotation "1" )
+  SERVER+=( +sv_maprotationfile "/opt/zandronum/rotation.txt" )
+  if [[ "${ROTATION_RANDOM:-0}" == "1" ]]; then
+    SERVER+=( +sv_maprotationrandom "1" )
+  fi
+fi
 
 if [[ -n "${WAD_LIST:-}" ]]; then
   IFS=',' read -r -a WADS <<< "$WAD_LIST"

@@ -1,4 +1,4 @@
-FROM debian:bookworm AS build
+FROM debian:trixie AS build
 ENV SCCACHE_SERVER_PORT=4374
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -36,7 +36,7 @@ RUN cmake -S . -B build -G Ninja \
 RUN cmake --build build --target pk3 zdoom -j"$(nproc)"
 
 
-FROM debian:bookworm-slim AS runtime
+FROM debian:trixie-slim AS runtime
 
 ARG DEBIAN_FRONTEND=noninteractive
 
