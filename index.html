@@ -1,1919 +1,1974 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-	  <link rel="icon" type="image/png" href="https://gib.gg/favicon.png" />
-    <title>PLAY - GIB.GG</title>
-    <style>
-      html, body {
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        background: #000;
-      }
 
-      /* Touch UI overlay (enabled when isTouch() is true). */
-      #touch-layer {
-        position: fixed;
-        inset: 0;
-        z-index: 20;
-        pointer-events: none;
-        user-select: none;
-        -webkit-user-select: none;
-        touch-action: none;
-      }
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="icon" type="image/png" href="https://gib.gg/favicon.png" />
+  <title>PLAY - GIB.GG</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+    }
 
-      #touch-layer[data-visible='0'] {
-        display: none;
-      }
+    /* Touch UI overlay (enabled when isTouch() is true). */
+    #touch-layer {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      pointer-events: none;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
 
+    #touch-layer[data-visible='0'] {
+      display: none;
+    }
+
+    #touch-joystick {
+      position: fixed;
+      left: 24px;
+      bottom: 24px;
+      width: clamp(140px, 22vmin, 220px);
+      height: clamp(140px, 22vmin, 220px);
+      border-radius: 999px;
+      pointer-events: auto;
+      background: rgba(255, 255, 255, 0.06);
+      border: 2px solid rgba(255, 255, 255, 0.18);
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+      touch-action: none;
+    }
+
+    #touch-joystick::after {
+      content: '';
+      position: absolute;
+      inset: 50% auto auto 50%;
+      width: 46%;
+      height: 46%;
+      transform: translate(-50%, -50%);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 2px solid rgba(255, 255, 255, 0.18);
+      box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.35);
+      opacity: 0.3;
+    }
+
+    #touch-joystick-knob {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 46%;
+      height: 46%;
+      transform: translate(-50%, -50%);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.18);
+      border: 2px solid rgba(255, 255, 255, 0.28);
+      box-shadow:
+        0 12px 24px rgba(0, 0, 0, 0.55),
+        inset 0 2px 10px rgba(0, 0, 0, 0.35);
+      transition: transform 90ms ease;
+      will-change: transform;
+    }
+
+    #touch-actions {
+      position: fixed;
+      right: 24px;
+      bottom: 24px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 14px;
+      width: calc(clamp(120px, 20vmin, 210px) * 2 + 14px);
+      height: calc(clamp(120px, 20vmin, 210px) * 2 + 14px);
+      pointer-events: none;
+      touch-action: none;
+    }
+
+    .touch-btn {
+      width: clamp(120px, 20vmin, 210px);
+      height: clamp(120px, 20vmin, 210px);
+      border-radius: 22px;
+      border: 2px solid rgba(255, 255, 255, 0.18);
+      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.55);
+      pointer-events: auto;
+      touch-action: none;
+      display: grid;
+      place-items: center;
+      font: 700 14px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      letter-spacing: 0.06em;
+      color: rgba(255, 255, 255, 0.9);
+      text-transform: uppercase;
+    }
+
+    .touch-btn:active,
+    .touch-btn[data-down='1'] {
+      transform: translateY(1px) scale(0.99);
+      filter: brightness(1.05);
+    }
+
+    #touch-fire {
+      grid-column: 1;
+      grid-row: 2;
+      background: rgba(255, 0, 64, 0.28);
+      border-color: rgba(255, 64, 96, 0.34);
+    }
+
+    #touch-use {
+      grid-column: 2;
+      grid-row: 1;
+      background: rgba(64, 128, 255, 0.22);
+      border-color: rgba(128, 170, 255, 0.34);
+    }
+
+    #touch-topleft {
+      position: fixed;
+      left: 14px;
+      top: 14px;
+      display: flex;
+      gap: 10px;
+      z-index: 21;
+      pointer-events: none;
+    }
+
+    .touch-btn-sm {
+      pointer-events: auto;
+      touch-action: none;
+      height: 44px;
+      min-width: 88px;
+      padding: 0 14px;
+      border-radius: 12px;
+      border: 2px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.92);
+      font: 700 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      display: grid;
+      place-items: center;
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.45);
+    }
+
+    .touch-btn-icon {
+      pointer-events: auto;
+      touch-action: none;
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      border-radius: 12px;
+      border: 2px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.92);
+      display: grid;
+      place-items: center;
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.45);
+    }
+
+    .touch-btn-icon svg {
+      width: 22px;
+      height: 22px;
+      display: block;
+      opacity: 0.95;
+    }
+
+    .touch-btn-icon:active,
+    .touch-btn-icon[data-down='1'] {
+      transform: translateY(1px) scale(0.99);
+      filter: brightness(1.05);
+    }
+
+    #touch-spacebar {
+      position: fixed;
+      left: 50%;
+      bottom: 16px;
+      transform: translateX(-50%);
+      width: clamp(220px, 42vw, 560px);
+      height: 58px;
+      border-radius: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.92);
+      font: 800 13px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      display: grid;
+      place-items: center;
+      pointer-events: auto;
+      touch-action: none;
+      box-shadow: 0 12px 22px rgba(0, 0, 0, 0.55);
+    }
+
+    #touch-spacebar[data-down='1'] {
+      transform: translateX(-50%) translateY(1px) scale(0.995);
+      filter: brightness(1.05);
+    }
+
+    /* Slightly smaller on narrow screens */
+    @media (max-width: 520px) {
       #touch-joystick {
-        position: fixed;
-        left: 24px;
-        bottom: 24px;
-        width: clamp(140px, 22vmin, 220px);
-        height: clamp(140px, 22vmin, 220px);
-        border-radius: 999px;
-        pointer-events: auto;
-        background: rgba(255, 255, 255, 0.06);
-        border: 2px solid rgba(255, 255, 255, 0.18);
-        box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
-        touch-action: none;
-      }
-
-      #touch-joystick::after {
-        content: '';
-        position: absolute;
-        inset: 50% auto auto 50%;
-        width: 46%;
-        height: 46%;
-        transform: translate(-50%, -50%);
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.08);
-        border: 2px solid rgba(255, 255, 255, 0.18);
-        box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.35);
-        opacity: 0.3;
-      }
-
-      #touch-joystick-knob {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        width: 46%;
-        height: 46%;
-        transform: translate(-50%, -50%);
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.18);
-        border: 2px solid rgba(255, 255, 255, 0.28);
-        box-shadow:
-          0 12px 24px rgba(0, 0, 0, 0.55),
-          inset 0 2px 10px rgba(0, 0, 0, 0.35);
-        transition: transform 90ms ease;
-        will-change: transform;
+        left: 14px;
+        bottom: 14px;
       }
 
       #touch-actions {
-        position: fixed;
-        right: 24px;
-        bottom: 24px;
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        grid-template-rows: 1fr 1fr;
-        gap: 14px;
-        width: calc(clamp(120px, 20vmin, 210px) * 2 + 14px);
-        height: calc(clamp(120px, 20vmin, 210px) * 2 + 14px);
-        pointer-events: none;
-        touch-action: none;
+        right: 14px;
+        bottom: 14px;
+        gap: 12px;
       }
+    }
 
-      .touch-btn {
-        width: clamp(120px, 20vmin, 210px);
-        height: clamp(120px, 20vmin, 210px);
-        border-radius: 22px;
-        border: 2px solid rgba(255, 255, 255, 0.18);
-        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.55);
-        pointer-events: auto;
-        touch-action: none;
-        display: grid;
-        place-items: center;
-        font: 700 14px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-        letter-spacing: 0.06em;
-        color: rgba(255, 255, 255, 0.9);
-        text-transform: uppercase;
-      }
+    #canvas {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      width: 100vw;
+      height: 100vh;
+      image-rendering: pixelated;
+    }
 
-      .touch-btn:active,
-      .touch-btn[data-down='1'] {
-        transform: translateY(1px) scale(0.99);
-        filter: brightness(1.05);
-      }
+    #loading-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+    }
 
-      #touch-fire {
-        grid-column: 1;
-        grid-row: 2;
-        background: rgba(255, 0, 64, 0.28);
-        border-color: rgba(255, 64, 96, 0.34);
-      }
+    #loading-underlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
 
-      #touch-use {
-        grid-column: 2;
-        grid-row: 1;
-        background: rgba(64, 128, 255, 0.22);
-        border-color: rgba(128, 170, 255, 0.34);
-      }
+    #loading-underlay .underlay-sprite {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(calc(-50% + var(--underlay-x, 0px)), -50%);
+      width: 384px;
+      height: 384px;
+      image-rendering: pixelated;
+    }
 
-      #touch-topleft {
-        position: fixed;
-        left: 14px;
-        top: 14px;
-        display: flex;
-        gap: 10px;
-        z-index: 21;
-        pointer-events: none;
-      }
-
-      .touch-btn-sm {
-        pointer-events: auto;
-        touch-action: none;
-        height: 44px;
-        min-width: 88px;
-        padding: 0 14px;
-        border-radius: 12px;
-        border: 2px solid rgba(255, 255, 255, 0.18);
-        background: rgba(255, 255, 255, 0.08);
-        color: rgba(255, 255, 255, 0.92);
-        font: 700 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        display: grid;
-        place-items: center;
-        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.45);
-      }
-
-      .touch-btn-icon {
-        pointer-events: auto;
-        touch-action: none;
-        width: 44px;
-        height: 44px;
-        padding: 0;
-        border-radius: 12px;
-        border: 2px solid rgba(255, 255, 255, 0.18);
-        background: rgba(255, 255, 255, 0.08);
-        color: rgba(255, 255, 255, 0.92);
-        display: grid;
-        place-items: center;
-        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.45);
-      }
-
-      .touch-btn-icon svg {
-        width: 22px;
-        height: 22px;
-        display: block;
-        opacity: 0.95;
-      }
-
-      .touch-btn-icon:active,
-      .touch-btn-icon[data-down='1'] {
-        transform: translateY(1px) scale(0.99);
-        filter: brightness(1.05);
-      }
-
-      #touch-spacebar {
-        position: fixed;
-        left: 50%;
-        bottom: 16px;
-        transform: translateX(-50%);
-        width: clamp(220px, 42vw, 560px);
-        height: 58px;
-        border-radius: 16px;
-        border: 2px solid rgba(255, 255, 255, 0.18);
-        background: rgba(255, 255, 255, 0.08);
-        color: rgba(255, 255, 255, 0.92);
-        font: 800 13px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
-        display: grid;
-        place-items: center;
-        pointer-events: auto;
-        touch-action: none;
-        box-shadow: 0 12px 22px rgba(0, 0, 0, 0.55);
-      }
-
-      #touch-spacebar[data-down='1'] {
-        transform: translateX(-50%) translateY(1px) scale(0.995);
-        filter: brightness(1.05);
-      }
-
-      /* Slightly smaller on narrow screens */
-      @media (max-width: 520px) {
-        #touch-joystick { left: 14px; bottom: 14px; }
-        #touch-actions { right: 14px; bottom: 14px; gap: 12px; }
-      }
-      #canvas {
-        display: block;
-        position: fixed;
-        inset: 0;
-        z-index: 0;
-        width: 100vw;
-        height: 100vh;
-        image-rendering: pixelated;
-      }
-
-      #loading-bg {
-        position: fixed;
-        inset: 0;
-        z-index: 1;
-        pointer-events: none;
-      }
-
-      #loading-underlay {
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-      }
-
-      #loading-underlay .underlay-sprite {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        transform: translate(calc(-50% + var(--underlay-x, 0px)), -50%);
-        width: 384px;
-        height: 384px;
-        image-rendering: pixelated;
-      }
-
-      /* Bottom border image: emerald-5.png is 128x167; scale 2x -> 256x334.
+    /* Bottom border image: emerald-5.png is 128x167; scale 2x -> 256x334.
          Tile horizontally across the bottom edge while loading.
       */
-      #loading-border {
-        position: fixed;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        height: 334px;
-        z-index: 2;
-        pointer-events: none;
-        background-image: url('./static/emerald-5-short.png');
-        background-repeat: repeat-x;
+    #loading-border {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 334px;
+      z-index: 2;
+      pointer-events: none;
+      background-image: url('./static/emerald-5-short.png');
+      background-repeat: repeat-x;
+      background-position-x: 0px;
+      background-position-y: bottom;
+      background-size: 256px 192px;
+      image-rendering: pixelated;
+      animation: loading-pan-x 24s linear infinite;
+    }
+
+    #loading-border-top {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 334px;
+      z-index: 2;
+      pointer-events: none;
+      background-image: url('./static/emerald-1-alt.png');
+      background-repeat: repeat-x;
+      background-position-x: 0px;
+      background-position-y: top;
+      background-size: 256px 192px;
+      image-rendering: pixelated;
+      animation: loading-pan-x 24s linear infinite;
+    }
+
+    @keyframes loading-pan-x {
+      from {
         background-position-x: 0px;
-        background-position-y: bottom;
-        background-size: 256px 192px;
-        image-rendering: pixelated;
-        animation: loading-pan-x 24s linear infinite;
       }
 
-      #loading-border-top {
-        position: fixed;
-        left: 0;
-        right: 0;
-        top: 0;
-        height: 334px;
-        z-index: 2;
-        pointer-events: none;
-        background-image: url('./static/emerald-1-alt.png');
-        background-repeat: repeat-x;
-        background-position-x: 0px;
-        background-position-y: top;
-        background-size: 256px 192px;
-        image-rendering: pixelated;
-        animation: loading-pan-x 24s linear infinite;
+      to {
+        background-position-x: 256px;
       }
+    }
 
-      @keyframes loading-pan-x {
-        from { background-position-x: 0px; }
-        to { background-position-x: 256px; }
-      }
-
-      #loading-vignette {
-        position: fixed;
-        inset: 0;
-        z-index: 9;
-        pointer-events: none;
-        background: radial-gradient(
-          ellipse at center,
+    #loading-vignette {
+      position: fixed;
+      inset: 0;
+      z-index: 9;
+      pointer-events: none;
+      background: radial-gradient(ellipse at center,
           rgba(0, 0, 0, 0) 0%,
           rgba(0, 0, 0, 0) 55%,
-          rgba(0, 0, 0, 0.65) 100%
-        );
-      }
+          rgba(0, 0, 0, 0.65) 100%);
+    }
 
-      #loading-bg svg {
-        width: 100%;
-        height: 100%;
-        display: block;
-        opacity: 0.7;
-        filter: brightness(0.8);
-      }
+    #loading-bg svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+      opacity: 0.7;
+      filter: brightness(0.8);
+    }
 
-      #loading-bg image {
-        image-rendering: pixelated;
-      }
-      #hud {
-        position: fixed;
-        left: 10px;
-        bottom: 10px;
-        z-index: 12;
-        max-width: min(720px, calc(100vw - 20px));
-        color: #e6edf3;
-        font: 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-        background: rgba(0,0,0,0.55);
-        border: 1px solid rgba(255,255,255,0.15);
-        border-radius: 8px;
-        padding: 8px 10px;
-        pointer-events: none;
-        white-space: pre-wrap;
-      }
+    #loading-bg image {
+      image-rendering: pixelated;
+    }
 
-      #splash {
-        position: fixed;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        z-index: 10;
-        pointer-events: none;
-      }
+    #hud {
+      position: fixed;
+      left: 10px;
+      bottom: 10px;
+      z-index: 12;
+      max-width: min(720px, calc(100vw - 20px));
+      color: #e6edf3;
+      font: 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      background: rgba(0, 0, 0, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      padding: 8px 10px;
+      pointer-events: none;
+      white-space: pre-wrap;
+    }
 
-      #splash img {
-        display: block;
-        width: min(60vw, 420px);
-        max-width: calc(100vw - 40px);
-        height: auto;
-        image-rendering: auto;
-        filter:
-          drop-shadow(0 16px 28px rgba(0, 0, 0, 0.75))
-          drop-shadow(0 0 48px rgba(0, 0, 0, 0.55));
-      }
+    #splash {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 10;
+      pointer-events: none;
+    }
 
-      #fmod-credit {
-        position: fixed;
-        right: 10px;
-        bottom: 10px;
-        max-width: min(420px, calc(100vw - 20px));
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        z-index: 11;
-        color: #e6edf3;
-        font: 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-        line-height: 1.2;
-        background: rgba(0,0,0,0.55);
-        border: 1px solid rgba(255,255,255,0.15);
-        border-radius: 8px;
-        padding: 8px 10px;
-        pointer-events: none;
-      }
+    #splash img {
+      display: block;
+      width: min(60vw, 420px);
+      max-width: calc(100vw - 40px);
+      height: auto;
+      image-rendering: auto;
+      filter:
+        drop-shadow(0 16px 28px rgba(0, 0, 0, 0.75)) drop-shadow(0 0 48px rgba(0, 0, 0, 0.55));
+    }
 
-      #fmod-credit img {
-        height: 22px;
-        width: auto;
-        flex: 0 0 auto;
-      }
+    #fmod-credit {
+      position: fixed;
+      right: 10px;
+      bottom: 10px;
+      max-width: min(420px, calc(100vw - 20px));
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 11;
+      color: #e6edf3;
+      font: 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      line-height: 1.2;
+      background: rgba(0, 0, 0, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      padding: 8px 10px;
+      pointer-events: none;
+    }
 
-      #fmod-credit .fmod-text {
-        font-size: 11px;
-      }
-    </style>
-  </head>
+    #fmod-credit img {
+      height: 22px;
+      width: auto;
+      flex: 0 0 auto;
+    }
 
-  <body>
-    <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
-    <div id="touch-layer" data-visible="0" aria-hidden="true">
-      <div id="touch-topleft">
-        <div id="touch-menu" class="touch-btn-icon" data-down="0" aria-label="Menu" title="Menu">
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M4 6h16" />
-            <path d="M4 12h16" />
-            <path d="M4 18h16" />
-          </svg>
-        </div>
-        <div id="touch-map" class="touch-btn-icon" data-down="0" aria-label="Scoreboard" title="Scoreboard">
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="4" y="5" width="16" height="14" rx="2" />
-            <path d="M8 9h2" />
-            <path d="M12 9h6" />
-            <path d="M8 13h2" />
-            <path d="M12 13h6" />
-          </svg>
-        </div>
+    #fmod-credit .fmod-text {
+      font-size: 11px;
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+  <div id="touch-layer" data-visible="0" aria-hidden="true">
+    <div id="touch-topleft">
+      <div id="touch-menu" class="touch-btn-icon" data-down="0" aria-label="Menu" title="Menu">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round">
+          <path d="M4 6h16" />
+          <path d="M4 12h16" />
+          <path d="M4 18h16" />
+        </svg>
       </div>
-      <div id="touch-joystick">
-        <div id="touch-joystick-knob"></div>
+      <div id="touch-map" class="touch-btn-icon" data-down="0" aria-label="Scoreboard" title="Scoreboard">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="5" width="16" height="14" rx="2" />
+          <path d="M8 9h2" />
+          <path d="M12 9h6" />
+          <path d="M8 13h2" />
+          <path d="M12 13h6" />
+        </svg>
       </div>
-      <div id="touch-actions">
-        <div></div>
-        <div id="touch-use" class="touch-btn" data-down="0">USE</div>
-        <div id="touch-fire" class="touch-btn" data-down="0">FIRE</div>
-        <div></div>
-      </div>
-      <div id="touch-spacebar" data-down="0">SPACE</div>
     </div>
-    <div id="loading-bg">
-      <div id="loading-underlay" aria-hidden="true">
-        <img class="underlay-sprite" data-base="-2304" src="./static/emerald-7.png" alt="" />
-        <img class="underlay-sprite" data-base="-1536" src="./static/emerald-4.png" alt="" />
-        <img class="underlay-sprite" data-base="-768" src="./static/emerald-7.png" alt="" />
-        <img class="underlay-sprite" data-base="0" src="./static/emerald-4.png" alt="" />
-        <img class="underlay-sprite" data-base="768" src="./static/emerald-7.png" alt="" />
-        <img class="underlay-sprite" data-base="1536" src="./static/emerald-4.png" alt="" />
-        <img class="underlay-sprite" data-base="2304" src="./static/emerald-7.png" alt="" />
-      </div>
-      <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
-        <defs>
-          <!-- 3-frame 64x64 spritesheet stitched horizontally (192x64).
+    <div id="touch-joystick">
+      <div id="touch-joystick-knob"></div>
+    </div>
+    <div id="touch-actions">
+      <div></div>
+      <div id="touch-use" class="touch-btn" data-down="0">USE</div>
+      <div id="touch-fire" class="touch-btn" data-down="0">FIRE</div>
+      <div></div>
+    </div>
+    <div id="touch-spacebar" data-down="0">SPACE</div>
+  </div>
+  <div id="loading-bg">
+    <div id="loading-underlay" aria-hidden="true">
+      <img class="underlay-sprite" data-base="-2304" src="./static/emerald-7.png" alt="" />
+      <img class="underlay-sprite" data-base="-1536" src="./static/emerald-4.png" alt="" />
+      <img class="underlay-sprite" data-base="-768" src="./static/emerald-7.png" alt="" />
+      <img class="underlay-sprite" data-base="0" src="./static/emerald-4.png" alt="" />
+      <img class="underlay-sprite" data-base="768" src="./static/emerald-7.png" alt="" />
+      <img class="underlay-sprite" data-base="1536" src="./static/emerald-4.png" alt="" />
+      <img class="underlay-sprite" data-base="2304" src="./static/emerald-7.png" alt="" />
+    </div>
+    <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+      <defs>
+        <!-- 3-frame 64x64 spritesheet stitched horizontally (192x64).
                Scale 4x -> frame is 256x256; tile that across the viewport.
           -->
-          <pattern id="bg-pat" patternUnits="userSpaceOnUse" width="256" height="256">
-            <image
-              id="bg-sprite"
-              href="https://gib.gg/red.png"
-              x="0"
-              y="0"
-              width="768"
-              height="256"
-              preserveAspectRatio="none"
-            />
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#bg-pat)" />
-      </svg>
-    </div>
-    <div id="loading-border-top" aria-hidden="true"></div>
-    <div id="loading-border" aria-hidden="true"></div>
-    <div id="loading-vignette" aria-hidden="true"></div>
-    <div id="splash">
-      <img src="https://gib.gg/logo.png" alt="Splash" />
-    </div>
-    <div id="hud">Loading…</div>
-    <div id="fmod-credit">
-      <img src="./static/fmod-logo.svg" alt="FMOD Studio" />
-      <div class="fmod-text">Audio Engine: FMOD Studio by Firelight Technologies Pty Ltd.</div>
-    </div>
+        <pattern id="bg-pat" patternUnits="userSpaceOnUse" width="256" height="256">
+          <image id="bg-sprite" href="https://gib.gg/red.png" x="0" y="0" width="768" height="256"
+            preserveAspectRatio="none" />
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#bg-pat)" />
+    </svg>
+  </div>
+  <div id="loading-border-top" aria-hidden="true"></div>
+  <div id="loading-border" aria-hidden="true"></div>
+  <div id="loading-vignette" aria-hidden="true"></div>
+  <div id="splash">
+    <img src="https://gib.gg/logo.png" alt="Splash" />
+  </div>
+  <div id="hud">Loading…</div>
+  <div id="fmod-credit">
+    <img src="./static/fmod-logo.svg" alt="FMOD Studio" />
+    <div class="fmod-text">Audio Engine: FMOD Studio by Firelight Technologies Pty Ltd.</div>
+  </div>
 
-    <!-- LiveKit JS SDK (UMD build) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/livekit-client/2.15.7/livekit-client.umd.js"></script>
-    <!-- Emscripten output (generated by the Docker build) -->
-    <script src="./zandronum.js"></script>
+  <!-- LiveKit JS SDK (UMD build) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/livekit-client/2.15.7/livekit-client.umd.js"></script>
+  <!-- Emscripten output (generated by the Docker build) -->
+  <script src="./zandronum.js"></script>
 
-    <script>
-      const hud = document.getElementById('hud');
-      const canvas = document.getElementById('canvas');
-      const touchLayer = document.getElementById('touch-layer');
-      const touchJoystick = document.getElementById('touch-joystick');
-      const touchJoystickKnob = document.getElementById('touch-joystick-knob');
-      const touchFire = document.getElementById('touch-fire');
-      const touchUse = document.getElementById('touch-use');
-      const touchMenu = document.getElementById('touch-menu');
-      const touchMap = document.getElementById('touch-map');
-      const touchSpacebar = document.getElementById('touch-spacebar');
-      const fmodCredit = document.getElementById('fmod-credit');
-      const splash = document.getElementById('splash');
-      const loadingBg = document.getElementById('loading-bg');
-      const loadingBorderTop = document.getElementById('loading-border-top');
-      const loadingBorder = document.getElementById('loading-border');
-      const loadingVignette = document.getElementById('loading-vignette');
-      const bgPattern = document.getElementById('bg-pat');
-      const bgSprite = document.getElementById('bg-sprite');
-      const underlaySprites = Array.from(document.querySelectorAll('#loading-underlay .underlay-sprite'));
+  <script>
+    const hud = document.getElementById('hud');
+    const canvas = document.getElementById('canvas');
+    const touchLayer = document.getElementById('touch-layer');
+    const touchJoystick = document.getElementById('touch-joystick');
+    const touchJoystickKnob = document.getElementById('touch-joystick-knob');
+    const touchFire = document.getElementById('touch-fire');
+    const touchUse = document.getElementById('touch-use');
+    const touchMenu = document.getElementById('touch-menu');
+    const touchMap = document.getElementById('touch-map');
+    const touchSpacebar = document.getElementById('touch-spacebar');
+    const fmodCredit = document.getElementById('fmod-credit');
+    const splash = document.getElementById('splash');
+    const loadingBg = document.getElementById('loading-bg');
+    const loadingBorderTop = document.getElementById('loading-border-top');
+    const loadingBorder = document.getElementById('loading-border');
+    const loadingVignette = document.getElementById('loading-vignette');
+    const bgPattern = document.getElementById('bg-pat');
+    const bgSprite = document.getElementById('bg-sprite');
+    const underlaySprites = Array.from(document.querySelectorAll('#loading-underlay .underlay-sprite'));
 
-      let bgAnimTimer = 0;
-      let bgPanRaf = 0;
-      let bgPanStart = 0;
+    let bgAnimTimer = 0;
+    let bgPanRaf = 0;
+    let bgPanStart = 0;
 
-      // Touch detection (debugTouch forces touch UI on for desktop debugging).
-      const debugTouch = (() => {
-        try {
-          const u = new URL(window.location.href);
-          return u.searchParams.get('debugtouch') === '1';
-        } catch {
-          return false;
-        }
-      })();
-      if (debugTouch) {
-        console.log('debugtouch=1: forcing touch UI enabled');
-      }
-      const isTouch = () => debugTouch || navigator.maxTouchPoints > 0;
-
-      function updateBgPan(ts) {
-        try {
-          if (!bgPanStart) bgPanStart = ts;
-
-          // Pan speed in CSS pixels per second; modulo by tile width for seamless looping.
-          const speedPxPerSec = 8;
-          const elapsedSec = (ts - bgPanStart) / 1000;
-
-          const tileW = 256;
-          const offset = (elapsedSec * speedPxPerSec) % tileW;
-          if (bgPattern) {
-            bgPattern.setAttribute('x', offset.toFixed(2));
-          }
-
-          // Underlay: keep the “single centered square” look, but pan it and wrap around.
-          // We render multiple copies (spaced 1024px apart) and wrap their x offsets.
-          if (underlaySprites.length) {
-            const spacing = 768; // px between underlay sprite bases
-            const range = spacing * underlaySprites.length;
-            const panPx = elapsedSec * speedPxPerSec;
-
-            const wrap = (value, wrapRange) => {
-              const half = wrapRange / 2;
-              // JS % can be negative; normalize.
-              return ((((value + half) % wrapRange) + wrapRange) % wrapRange) - half;
-            };
-
-            for (const el of underlaySprites) {
-              const base = Number(el.dataset.base) || 0;
-              const x = wrap(base + panPx, range);
-              el.style.setProperty('--underlay-x', `${x.toFixed(2)}px`);
-            }
-          }
-        } catch (_) {}
-
-        bgPanRaf = window.requestAnimationFrame(updateBgPan);
-      }
-
-      function startBgPan() {
-        if (bgPanRaf) return;
-        bgPanStart = 0;
-        bgPanRaf = window.requestAnimationFrame(updateBgPan);
-      }
-
-      function stopBgPan() {
-        if (!bgPanRaf) return;
-        window.cancelAnimationFrame(bgPanRaf);
-        bgPanRaf = 0;
-        bgPanStart = 0;
-      }
-
-      function updateBgFrame() {
-        try {
-          if (!bgSprite) return;
-          const frame = Math.floor(Date.now() / 1000) % 3;
-          bgSprite.setAttribute('x', String(-frame * 256));
-        } catch (_) {}
-      }
-
-      function startBgAnim() {
-        if (bgAnimTimer) return;
-        updateBgFrame();
-        bgAnimTimer = window.setInterval(updateBgFrame, 1000);
-        startBgPan();
-      }
-
-      function stopBgAnim() {
-        if (!bgAnimTimer) return;
-        window.clearInterval(bgAnimTimer);
-        bgAnimTimer = 0;
-        stopBgPan();
-      }
-
-      // Allow the canvas to receive keyboard focus (helps SDL + pointer lock).
+    // Touch detection (debugTouch forces touch UI on for desktop debugging).
+    const debugTouch = (() => {
       try {
-        canvas.tabIndex = 0;
-        canvas.style.outline = 'none';
-      } catch (_) {}
-
-      function setHud(text) {
-        const s = String(text ?? '');
-        hud.textContent = s;
-        try {
-          const visible = !!s.trim();
-          if (fmodCredit) {
-            fmodCredit.style.display = visible ? '' : 'none';
-          }
-          if (splash) {
-            splash.style.display = visible ? '' : 'none';
-          }
-          if (loadingBg) {
-            loadingBg.style.display = visible ? '' : 'none';
-          }
-          if (loadingBorderTop) {
-            loadingBorderTop.style.display = visible ? '' : 'none';
-          }
-          if (loadingBorder) {
-            loadingBorder.style.display = visible ? '' : 'none';
-          }
-          if (loadingVignette) {
-            loadingVignette.style.display = visible ? '' : 'none';
-          }
-          if (visible) {
-            startBgAnim();
-          } else {
-            stopBgAnim();
-          }
-        } catch (_) {}
+        const u = new URL(window.location.href);
+        return u.searchParams.get('debugtouch') === '1';
+      } catch {
+        return false;
       }
+    })();
+    if (debugTouch) {
+      console.log('debugtouch=1: forcing touch UI enabled');
+    }
+    const isTouch = () => debugTouch || navigator.maxTouchPoints > 0;
 
-      function getParam(name) {
-        try {
-          const u = new URL(window.location.href);
-          return u.searchParams.get(name);
-        } catch {
-          return null;
-        }
-      }
+    function updateBgPan(ts) {
+      try {
+        if (!bgPanStart) bgPanStart = ts;
 
-      function getGameIdFromUrl() {
-        // Requested: ?q=<game_id>. Keep ?g=<uuid> as a compatibility alias.
-        return getParam('q') || getParam('g');
-      }
+        // Pan speed in CSS pixels per second; modulo by tile width for seamless looping.
+        const speedPxPerSec = 8;
+        const elapsedSec = (ts - bgPanStart) / 1000;
 
-      function isUuid(s) {
-        return typeof s === 'string' && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(s);
-      }
-
-      function normalizeUuid(s) {
-        return String(s ?? '').toLowerCase();
-      }
-
-      function parseCommaSeparatedUuids(text) {
-        const raw = String(text ?? '').trim();
-        if (!raw) return [];
-        const parts = raw.split(',').map((x) => String(x).trim()).filter(Boolean);
-        const out = [];
-        for (const p of parts) {
-          // Accept exactly one UUID per entry.
-          if (!isUuid(p)) {
-            const extracted = extractFirstUuid(p);
-            if (!extracted) {
-              throw new Error(`invalid UUID in pwad list: "${p}"`);
-            }
-            out.push(normalizeUuid(extracted));
-          } else {
-            out.push(normalizeUuid(p));
-          }
-        }
-        return out;
-      }
-
-      function getSinglePlayerParamsFromUrl() {
-        // Single player is used when no ?q/?g is provided.
-        // Required: ?iwad=<uuid>
-        // Optional: ?pwad=<uuid,uuid,...>
-        // Optional: ?warp=<map>
-        const iwad = getParam('iwad');
-        if (!iwad) return null;
-
-        const iwadId = isUuid(iwad) ? normalizeUuid(iwad) : normalizeUuid(extractFirstUuid(iwad));
-        if (!iwadId) {
-          throw new Error('invalid iwad (expected UUID)');
+        const tileW = 256;
+        const offset = (elapsedSec * speedPxPerSec) % tileW;
+        if (bgPattern) {
+          bgPattern.setAttribute('x', offset.toFixed(2));
         }
 
-        const pwadRaw = getParam('pwad');
-        const pwadIds = pwadRaw ? parseCommaSeparatedUuids(pwadRaw) : [];
+        // Underlay: keep the “single centered square” look, but pan it and wrap around.
+        // We render multiple copies (spaced 1024px apart) and wrap their x offsets.
+        if (underlaySprites.length) {
+          const spacing = 768; // px between underlay sprite bases
+          const range = spacing * underlaySprites.length;
+          const panPx = elapsedSec * speedPxPerSec;
 
-        const warpRaw = getParam('warp');
-        const warp = warpRaw && String(warpRaw).trim() ? String(warpRaw).trim() : null;
-        if (warp && !/^[A-Za-z0-9_]+$/.test(warp)) {
-          throw new Error('invalid warp (expected map name like MAP01 or E1M1)');
+          const wrap = (value, wrapRange) => {
+            const half = wrapRange / 2;
+            // JS % can be negative; normalize.
+            return ((((value + half) % wrapRange) + wrapRange) % wrapRange) - half;
+          };
+
+          for (const el of underlaySprites) {
+            const base = Number(el.dataset.base) || 0;
+            const x = wrap(base + panPx, range);
+            el.style.setProperty('--underlay-x', `${x.toFixed(2)}px`);
+          }
         }
+      } catch (_) { }
 
-        return { iwadId, pwadIds, warp };
+      bgPanRaf = window.requestAnimationFrame(updateBgPan);
+    }
+
+    function startBgPan() {
+      if (bgPanRaf) return;
+      bgPanStart = 0;
+      bgPanRaf = window.requestAnimationFrame(updateBgPan);
+    }
+
+    function stopBgPan() {
+      if (!bgPanRaf) return;
+      window.cancelAnimationFrame(bgPanRaf);
+      bgPanRaf = 0;
+      bgPanStart = 0;
+    }
+
+    function updateBgFrame() {
+      try {
+        if (!bgSprite) return;
+        const frame = Math.floor(Date.now() / 1000) % 3;
+        bgSprite.setAttribute('x', String(-frame * 256));
+      } catch (_) { }
+    }
+
+    function startBgAnim() {
+      if (bgAnimTimer) return;
+      updateBgFrame();
+      bgAnimTimer = window.setInterval(updateBgFrame, 1000);
+      startBgPan();
+    }
+
+    function stopBgAnim() {
+      if (!bgAnimTimer) return;
+      window.clearInterval(bgAnimTimer);
+      bgAnimTimer = 0;
+      stopBgPan();
+    }
+
+    // Allow the canvas to receive keyboard focus (helps SDL + pointer lock).
+    try {
+      canvas.tabIndex = 0;
+      canvas.style.outline = 'none';
+    } catch (_) { }
+
+    function setHud(text) {
+      const s = String(text ?? '');
+      hud.textContent = s;
+      try {
+        const visible = !!s.trim();
+        if (fmodCredit) {
+          fmodCredit.style.display = visible ? '' : 'none';
+        }
+        if (splash) {
+          splash.style.display = visible ? '' : 'none';
+        }
+        if (loadingBg) {
+          loadingBg.style.display = visible ? '' : 'none';
+        }
+        if (loadingBorderTop) {
+          loadingBorderTop.style.display = visible ? '' : 'none';
+        }
+        if (loadingBorder) {
+          loadingBorder.style.display = visible ? '' : 'none';
+        }
+        if (loadingVignette) {
+          loadingVignette.style.display = visible ? '' : 'none';
+        }
+        if (visible) {
+          startBgAnim();
+        } else {
+          stopBgAnim();
+        }
+      } catch (_) { }
+    }
+
+    function getParam(name) {
+      try {
+        const u = new URL(window.location.href);
+        return u.searchParams.get(name);
+      } catch {
+        return null;
+      }
+    }
+
+    function getGameIdFromUrl() {
+      // Requested: ?q=<game_id>. Keep ?g=<uuid> as a compatibility alias.
+      return getParam('q') || getParam('g');
+    }
+
+    function isUuid(s) {
+      return typeof s === 'string' && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(s);
+    }
+
+    function normalizeUuid(s) {
+      return String(s ?? '').toLowerCase();
+    }
+
+    function parseCommaSeparatedUuids(text) {
+      const raw = String(text ?? '').trim();
+      if (!raw) return [];
+      const parts = raw.split(',').map((x) => String(x).trim()).filter(Boolean);
+      const out = [];
+      for (const p of parts) {
+        // Accept exactly one UUID per entry.
+        if (!isUuid(p)) {
+          const extracted = extractFirstUuid(p);
+          if (!extracted) {
+            throw new Error(`invalid UUID in pwad list: "${p}"`);
+          }
+          out.push(normalizeUuid(extracted));
+        } else {
+          out.push(normalizeUuid(p));
+        }
+      }
+      return out;
+    }
+
+    function getSinglePlayerParamsFromUrl() {
+      // Single player is used when no ?q/?g is provided.
+      // Required: ?iwad=<uuid>
+      // Optional: ?pwad=<uuid,uuid,...>
+      // Optional: ?warp=<map>
+      const iwad = getParam('iwad');
+      if (!iwad) return null;
+
+      const iwadId = isUuid(iwad) ? normalizeUuid(iwad) : normalizeUuid(extractFirstUuid(iwad));
+      if (!iwadId) {
+        throw new Error('invalid iwad (expected UUID)');
       }
 
-      function extractFirstUuid(text) {
-        const s = String(text ?? '');
-        // Match a canonical UUID (accept any version/variant).
-        const m = s.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/);
-        return m ? m[0] : null;
+      const pwadRaw = getParam('pwad');
+      const pwadIds = pwadRaw ? parseCommaSeparatedUuids(pwadRaw) : [];
+
+      const warpRaw = getParam('warp');
+      const warp = warpRaw && String(warpRaw).trim() ? String(warpRaw).trim() : null;
+      if (warp && !/^[A-Za-z0-9_]+$/.test(warp)) {
+        throw new Error('invalid warp (expected map name like MAP01 or E1M1)');
       }
 
-      function getGameIdForInfoOrThrow(joinArg) {
-        if (!joinArg) {
-          throw new Error('missing game id (use ?q=<uuid>)');
-        }
-        // If joinArg is already a UUID, use it directly; otherwise try extracting one.
-        const direct = extractFirstUuid(joinArg);
-        if (direct) return direct;
+      return { iwadId, pwadIds, warp };
+    }
+
+    function extractFirstUuid(text) {
+      const s = String(text ?? '');
+      // Match a canonical UUID (accept any version/variant).
+      const m = s.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/);
+      return m ? m[0] : null;
+    }
+
+    function getGameIdForInfoOrThrow(joinArg) {
+      if (!joinArg) {
         throw new Error('missing game id (use ?q=<uuid>)');
       }
+      // If joinArg is already a UUID, use it directly; otherwise try extracting one.
+      const direct = extractFirstUuid(joinArg);
+      if (direct) return direct;
+      throw new Error('missing game id (use ?q=<uuid>)');
+    }
 
-      async function fetchGameInfo(gameId) {
-        const url = `https://api.dorch.beebs.dev/game/${encodeURIComponent(String(gameId))}`;
-        const resp = await fetch(url, { method: 'GET' });
-        if (!resp.ok) {
-          throw new Error(`game info fetch failed: ${resp.status} ${resp.statusText}`);
-        }
-        const json = await resp.json();
-        console.log('game info json:', json);
-        return json;
+    async function fetchGameInfo(gameId) {
+      const url = `https://api.dorch.beebs.dev/game/${encodeURIComponent(String(gameId))}`;
+      const resp = await fetch(url, { method: 'GET' });
+      if (!resp.ok) {
+        throw new Error(`game info fetch failed: ${resp.status} ${resp.statusText}`);
       }
+      const json = await resp.json();
+      console.log('game info json:', json);
+      return json;
+    }
 
-      function extractWadIdsFromGameInfoJson(gameJson) {
-        // Public GET /game/{id} returns a GameSummary (master crate):
-        //   { game_id, iwad, files?: [uuid], info?: { ... } }
-        // Some callers may expect these under `info`, so support both.
-        const root = gameJson && typeof gameJson === 'object' ? gameJson : {};
-        const maybeInfo = root.info && typeof root.info === 'object' ? root.info : null;
+    function extractWadIdsFromGameInfoJson(gameJson) {
+      // Public GET /game/{id} returns a GameSummary (master crate):
+      //   { game_id, iwad, files?: [uuid], info?: { ... } }
+      // Some callers may expect these under `info`, so support both.
+      const root = gameJson && typeof gameJson === 'object' ? gameJson : {};
+      const maybeInfo = root.info && typeof root.info === 'object' ? root.info : null;
 
-        const iwad = (maybeInfo && maybeInfo.iwad) ? maybeInfo.iwad : root.iwad;
-        const files = (maybeInfo && maybeInfo.files) ? maybeInfo.files : root.files;
+      const iwad = (maybeInfo && maybeInfo.iwad) ? maybeInfo.iwad : root.iwad;
+      const files = (maybeInfo && maybeInfo.files) ? maybeInfo.files : root.files;
 
-        const wadIds = [];
-        if (typeof iwad === 'string' && iwad) wadIds.push(iwad);
-        if (Array.isArray(files)) {
-          for (const f of files) {
-            if (typeof f === 'string' && f) wadIds.push(f);
-          }
-        }
-        return wadIds;
-      }
-
-      async function resolveWadUrls(wadIds) {
-        const url = 'https://api.dorch.beebs.dev/wad_urls';
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ wad_ids: wadIds }),
-        });
-        if (!resp.ok) {
-          throw new Error(`wad_urls failed: ${resp.status} ${resp.statusText}`);
-        }
-        const json = await resp.json();
-        console.log('wad_urls response:', json);
-        return json;
-      }
-
-      function isProbablyGzip(u8) {
-        try {
-          return u8 && u8.length >= 2 && u8[0] === 0x1f && u8[1] === 0x8b;
-        } catch (_) {
-          return false;
+      const wadIds = [];
+      if (typeof iwad === 'string' && iwad) wadIds.push(iwad);
+      if (Array.isArray(files)) {
+        for (const f of files) {
+          if (typeof f === 'string' && f) wadIds.push(f);
         }
       }
+      return wadIds;
+    }
 
-      async function gunzipBytes(u8) {
-        if (typeof DecompressionStream !== 'function') {
-          throw new Error('gzip decompression not supported (DecompressionStream missing)');
-        }
-        const ds = new DecompressionStream('gzip');
-        const decompressed = await new Response(new Blob([u8]).stream().pipeThrough(ds)).arrayBuffer();
-        return new Uint8Array(decompressed);
+    async function resolveWadUrls(wadIds) {
+      const url = 'https://api.dorch.beebs.dev/wad_urls';
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wad_ids: wadIds }),
+      });
+      if (!resp.ok) {
+        throw new Error(`wad_urls failed: ${resp.status} ${resp.statusText}`);
       }
+      const json = await resp.json();
+      console.log('wad_urls response:', json);
+      return json;
+    }
 
-      async function downloadAndMaybeGunzip(url) {
-        const resp = await fetch(url, { method: 'GET' });
-        if (!resp.ok) {
-          throw new Error(`wad download failed: ${resp.status} ${resp.statusText}`);
-        }
-        const buf = await resp.arrayBuffer();
-        const u8 = new Uint8Array(buf);
-        if (isProbablyGzip(u8) || String(url).toLowerCase().endsWith('.gz')) {
-          return await gunzipBytes(u8);
-        }
-        return u8;
+    function isProbablyGzip(u8) {
+      try {
+        return u8 && u8.length >= 2 && u8[0] === 0x1f && u8[1] === 0x8b;
+      } catch (_) {
+        return false;
       }
+    }
 
-      function inferDecompressedExtensionFromUrl(url) {
-        // Example: .../foo.wad.gz  -> .wad
-        //          .../bar.pk3.gz  -> .pk3
-        //          .../baz.wad     -> .wad
-        // If we can't infer, fall back to .wad.
-        try {
-          const u = new URL(String(url), window.location.href);
-          const name = (u.pathname.split('/').pop() || '').toLowerCase();
-          const noGz = name.endsWith('.gz') ? name.slice(0, -3) : name;
-          const dot = noGz.lastIndexOf('.');
-          if (dot >= 0 && dot < noGz.length - 1) {
-            const ext = noGz.slice(dot);
-            // Keep it conservative: only allow simple extensions.
-            if (/^\.[a-z0-9]{1,8}$/.test(ext)) return ext;
-          }
-        } catch (_) {
-          // ignore
-        }
-        return '.wad';
+    async function gunzipBytes(u8) {
+      if (typeof DecompressionStream !== 'function') {
+        throw new Error('gzip decompression not supported (DecompressionStream missing)');
       }
+      const ds = new DecompressionStream('gzip');
+      const decompressed = await new Response(new Blob([u8]).stream().pipeThrough(ds)).arrayBuffer();
+      return new Uint8Array(decompressed);
+    }
 
-      // Dorch browser settings overrides (shared with browser/ Settings modal).
-      const LS_NAME_KEY = 'dorch.settings.name';
-      const LS_CONFIG_KEY = 'dorch.settings.config';
-      const LS_DOOM2_META_KEY = 'dorch.settings.doom2_override';
-      const IDB_DB_NAME = 'dorch.settings';
-      const IDB_STORE_FILES = 'files';
-      const IDB_DOOM2_KEY = 'doom2_override';
-      const FREEDOOM2_IWAD_ID = '17bdc0a8-8a81-4b00-90d1-972bf406fa10';
-
-      let dorchSettings = null;
-
-      function safeJsonParse(value) {
-        if (!value) return null;
-        try {
-          return JSON.parse(value);
-        } catch {
-          return null;
-        }
+    async function downloadAndMaybeGunzip(url) {
+      const resp = await fetch(url, { method: 'GET' });
+      if (!resp.ok) {
+        throw new Error(`wad download failed: ${resp.status} ${resp.statusText}`);
       }
-
-      function coerceToUint8(data) {
-        if (!data) return null;
-        try {
-          if (data instanceof Uint8Array) return data;
-          if (data instanceof ArrayBuffer) return new Uint8Array(data);
-          if (data && data.buffer instanceof ArrayBuffer) {
-            const offset = Number(data.byteOffset) || 0;
-            const len = Number(data.byteLength) || (data.buffer.byteLength - offset);
-            return new Uint8Array(data.buffer, offset, len);
-          }
-        } catch (_) {
-          // ignore
-        }
-        return null;
+      const buf = await resp.arrayBuffer();
+      const u8 = new Uint8Array(buf);
+      if (isProbablyGzip(u8) || String(url).toLowerCase().endsWith('.gz')) {
+        return await gunzipBytes(u8);
       }
+      return u8;
+    }
 
-      function inferExtensionFromName(name) {
-        try {
-          const s = String(name || '');
-          const dot = s.lastIndexOf('.');
-          if (dot < 0 || dot === s.length - 1) return null;
-          const ext = s.slice(dot).toLowerCase();
+    function inferDecompressedExtensionFromUrl(url) {
+      // Example: .../foo.wad.gz  -> .wad
+      //          .../bar.pk3.gz  -> .pk3
+      //          .../baz.wad     -> .wad
+      // If we can't infer, fall back to .wad.
+      try {
+        const u = new URL(String(url), window.location.href);
+        const name = (u.pathname.split('/').pop() || '').toLowerCase();
+        const noGz = name.endsWith('.gz') ? name.slice(0, -3) : name;
+        const dot = noGz.lastIndexOf('.');
+        if (dot >= 0 && dot < noGz.length - 1) {
+          const ext = noGz.slice(dot);
+          // Keep it conservative: only allow simple extensions.
           if (/^\.[a-z0-9]{1,8}$/.test(ext)) return ext;
-        } catch (_) {
-          // ignore
         }
+      } catch (_) {
+        // ignore
+      }
+      return '.wad';
+    }
+
+    // Dorch browser settings overrides (shared with browser/ Settings modal).
+    const LS_NAME_KEY = 'dorch.settings.name';
+    const LS_CONFIG_KEY = 'dorch.settings.config';
+    const LS_DOOM2_META_KEY = 'dorch.settings.doom2_override';
+    const IDB_DB_NAME = 'dorch.settings';
+    const IDB_STORE_FILES = 'files';
+    const IDB_DOOM2_KEY = 'doom2_override';
+    const FREEDOOM2_IWAD_ID = '17bdc0a8-8a81-4b00-90d1-972bf406fa10';
+    const API_BASE_URL = 'https://api.gib.gg';
+    const STORAGE_KEY_ACCESS_TOKEN = 'dorch_access_token';
+    const STORAGE_KEY_USER_ID = 'dorch_user_id';
+
+    let dorchSettings = null;
+
+    function safeJsonParse(value) {
+      if (!value) return null;
+      try {
+        return JSON.parse(value);
+      } catch {
         return null;
       }
+    }
 
-      function openSettingsDb() {
-        return new Promise((resolve, reject) => {
-          if (typeof indexedDB === 'undefined') {
-            reject(new Error('indexedDB missing'));
-            return;
+    function coerceToUint8(data) {
+      if (!data) return null;
+      try {
+        if (data instanceof Uint8Array) return data;
+        if (data instanceof ArrayBuffer) return new Uint8Array(data);
+        if (data && data.buffer instanceof ArrayBuffer) {
+          const offset = Number(data.byteOffset) || 0;
+          const len = Number(data.byteLength) || (data.buffer.byteLength - offset);
+          return new Uint8Array(data.buffer, offset, len);
+        }
+      } catch (_) {
+        // ignore
+      }
+      return null;
+    }
+
+    function inferExtensionFromName(name) {
+      try {
+        const s = String(name || '');
+        const dot = s.lastIndexOf('.');
+        if (dot < 0 || dot === s.length - 1) return null;
+        const ext = s.slice(dot).toLowerCase();
+        if (/^\.[a-z0-9]{1,8}$/.test(ext)) return ext;
+      } catch (_) {
+        // ignore
+      }
+      return null;
+    }
+
+    function openSettingsDb() {
+      return new Promise((resolve, reject) => {
+        if (typeof indexedDB === 'undefined') {
+          reject(new Error('indexedDB missing'));
+          return;
+        }
+        const req = indexedDB.open(IDB_DB_NAME, 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(IDB_STORE_FILES)) {
+            db.createObjectStore(IDB_STORE_FILES);
           }
-          const req = indexedDB.open(IDB_DB_NAME, 1);
-          req.onupgradeneeded = () => {
-            const db = req.result;
-            if (!db.objectStoreNames.contains(IDB_STORE_FILES)) {
-              db.createObjectStore(IDB_STORE_FILES);
-            }
-          };
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function idbGetFile(key) {
+      const db = await openSettingsDb();
+      try {
+        return await new Promise((resolve, reject) => {
+          const tx = db.transaction(IDB_STORE_FILES, 'readonly');
+          tx.oncomplete = () => { };
+          tx.onerror = () => reject(tx.error);
+          const req = tx.objectStore(IDB_STORE_FILES).get(key);
           req.onsuccess = () => resolve(req.result);
           req.onerror = () => reject(req.error);
         });
+      } finally {
+        try { db.close(); } catch (_) { }
+      }
+    }
+
+    async function loadDorchSettings() {
+      const out = {
+        name: null,
+        config: null,
+        doom2Meta: null,
+        doom2OverrideBytes: null,
+      };
+
+      // localStorage is optional (can throw in some privacy modes).
+      try {
+        out.name = window.localStorage.getItem(LS_NAME_KEY);
+        out.config = window.localStorage.getItem(LS_CONFIG_KEY);
+        out.doom2Meta = safeJsonParse(window.localStorage.getItem(LS_DOOM2_META_KEY));
+      } catch (_) {
+        // ignore
       }
 
-      async function idbGetFile(key) {
-        const db = await openSettingsDb();
-        try {
-          return await new Promise((resolve, reject) => {
-            const tx = db.transaction(IDB_STORE_FILES, 'readonly');
-            tx.oncomplete = () => {};
-            tx.onerror = () => reject(tx.error);
-            const req = tx.objectStore(IDB_STORE_FILES).get(key);
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-          });
-        } finally {
-          try { db.close(); } catch (_) {}
-        }
+      // IndexedDB raw bytes (optional). We try regardless of localStorage metadata,
+      // since some browsers/users may clear localStorage but keep IDB entries.
+      try {
+        const rec = await idbGetFile(IDB_DOOM2_KEY);
+        const data = rec && typeof rec === 'object' ? rec.data : null;
+        const u8 = coerceToUint8(data);
+        if (u8 && u8.length) out.doom2OverrideBytes = u8;
+      } catch (_) {
+        // ignore
       }
 
-      async function loadDorchSettings() {
-        const out = {
-          name: null,
-          config: null,
-          doom2Meta: null,
-          doom2OverrideBytes: null,
-        };
+      return out;
+    }
 
-        // localStorage is optional (can throw in some privacy modes).
-        try {
-          out.name = window.localStorage.getItem(LS_NAME_KEY);
-          out.config = window.localStorage.getItem(LS_CONFIG_KEY);
-          out.doom2Meta = safeJsonParse(window.localStorage.getItem(LS_DOOM2_META_KEY));
-        } catch (_) {
-          // ignore
-        }
+    function getIdentityFromUrl() {
+      const fromUrl = getParam('identity');
+      if (fromUrl) return fromUrl;
+      const fromSettings = dorchSettings && typeof dorchSettings.name === 'string' ? dorchSettings.name : null;
+      return fromSettings && String(fromSettings).trim() ? String(fromSettings) : null;
+    }
 
-        // IndexedDB raw bytes (optional). We try regardless of localStorage metadata,
-        // since some browsers/users may clear localStorage but keep IDB entries.
-        try {
-          const rec = await idbGetFile(IDB_DOOM2_KEY);
-          const data = rec && typeof rec === 'object' ? rec.data : null;
-          const u8 = coerceToUint8(data);
-          if (u8 && u8.length) out.doom2OverrideBytes = u8;
-        } catch (_) {
-          // ignore
-        }
-
-        return out;
+    async function join(serverArg) {
+      // serverArg may be either:
+      //  - full join URL: https://api.synapse.beebs.dev/room/<uuid>/join
+      //  - room UUID: <uuid>
+      let arg = '';
+      if (serverArg !== undefined && serverArg !== null) {
+        arg = String(serverArg);
+      }
+      if (!arg) {
+        const fromUrl = getGameIdFromUrl();
+        if (fromUrl) arg = fromUrl;
+      }
+      if (!arg) {
+        throw new Error('missing game id (use ?q=<uuid>)');
       }
 
-      function getIdentityFromUrl() {
-        const fromUrl = getParam('identity');
-        if (fromUrl) return fromUrl;
-        const fromSettings = dorchSettings && typeof dorchSettings.name === 'string' ? dorchSettings.name : null;
-        return fromSettings && String(fromSettings).trim() ? String(fromSettings) : null;
+      const joinUrl = (arg.startsWith('http://') || arg.startsWith('https://'))
+        ? arg
+        : `https://api.dorch.beebs.dev/auth/${arg}`;
+
+      // If ?name=<name> is present, forward it to the join API.
+      let finalJoinUrl = joinUrl;
+      try {
+        const name = getIdentityFromUrl();
+        if (name) {
+          const u = new URL(joinUrl);
+          u.searchParams.set('identity', name);
+          finalJoinUrl = u.toString();
+        }
+      } catch (_) {
+        // Ignore URL parsing issues.
       }
 
-      async function join(serverArg) {
-        // serverArg may be either:
-        //  - full join URL: https://api.synapse.beebs.dev/room/<uuid>/join
-        //  - room UUID: <uuid>
-        let arg = '';
-        if (serverArg !== undefined && serverArg !== null) {
-          arg = String(serverArg);
-        }
-        if (!arg) {
-          const fromUrl = getGameIdFromUrl();
-          if (fromUrl) arg = fromUrl;
-        }
-        if (!arg) {
-          throw new Error('missing game id (use ?q=<uuid>)');
-        }
+      const resp = await fetch(finalJoinUrl, { method: 'GET' });
+      if (!resp.ok) {
+        throw new Error(`join failed: ${resp.status} ${resp.statusText}`);
+      }
+      const json = await resp.json();
+      if (!json || typeof json.token !== 'string' || typeof json.url !== 'string') {
+        throw new Error('join response missing token/url');
+      }
+      return { token: json.token, url: json.url };
+    }
 
-        const joinUrl = (arg.startsWith('http://') || arg.startsWith('https://'))
-          ? arg
-          : `https://api.dorch.beebs.dev/auth/${arg}`;
+    function resizeCanvas(module) {
+      // IMPORTANT:
+      // Zandronum's SDL path typically renders at a fixed internal resolution
+      // (often 640x480) and blits to the canvas at (0,0). If we resize the canvas
+      // backing buffer dynamically, the game may only draw into the top-left
+      // portion after a resize.
+      //
+      // To guarantee “stretched fullscreen” behavior on resize, we only enforce
+      // full-viewport *CSS sizing* here and let the engine keep its chosen
+      // backing-buffer resolution.
+      canvas.style.position = 'fixed';
+      canvas.style.inset = '0';
+      canvas.style.width = '100vw';
+      canvas.style.height = '100vh';
+    }
 
-        // If ?name=<name> is present, forward it to the join API.
-        let finalJoinUrl = joinUrl;
-        try {
-          const name = getIdentityFromUrl();
-          if (name) {
-            const u = new URL(joinUrl);
-            u.searchParams.set('identity', name);
-            finalJoinUrl = u.toString();
-          }
-        } catch (_) {
-          // Ignore URL parsing issues.
-        }
+    let resizeRaf = 0;
+    function scheduleResize(module) {
+      if (resizeRaf) return;
+      resizeRaf = requestAnimationFrame(() => {
+        resizeRaf = 0;
+        resizeCanvas(module);
+      });
+    }
 
-        const resp = await fetch(finalJoinUrl, { method: 'GET' });
-        if (!resp.ok) {
-          throw new Error(`join failed: ${resp.status} ${resp.statusText}`);
-        }
-        const json = await resp.json();
-        if (!json || typeof json.token !== 'string' || typeof json.url !== 'string') {
-          throw new Error('join response missing token/url');
-        }
-        return { token: json.token, url: json.url };
+    async function main() {
+      if (typeof window.createZandronumModule !== 'function') {
+        throw new Error('Emscripten module factory missing (createZandronumModule).');
       }
 
-      function resizeCanvas(module) {
-        // IMPORTANT:
-        // Zandronum's SDL path typically renders at a fixed internal resolution
-        // (often 640x480) and blits to the canvas at (0,0). If we resize the canvas
-        // backing buffer dynamically, the game may only draw into the top-left
-        // portion after a resize.
-        //
-        // To guarantee “stretched fullscreen” behavior on resize, we only enforce
-        // full-viewport *CSS sizing* here and let the engine keep its chosen
-        // backing-buffer resolution.
-        canvas.style.position = 'fixed';
-        canvas.style.inset = '0';
-        canvas.style.width = '100vw';
-        canvas.style.height = '100vh';
+      // Load optional client-side overrides (name/config/doom2.wad override).
+      dorchSettings = await loadDorchSettings();
+
+      const joinArg = getGameIdFromUrl();
+      if (joinArg && !window.LivekitClient) {
+        throw new Error('LiveKit SDK failed to load (LivekitClient global missing).');
+      }
+      const singlePlayer = !joinArg ? getSinglePlayerParamsFromUrl() : null;
+
+      // Multiplayer path: ?q/?g. Single player path: ?iwad (+ optional ?pwad/?warp).
+      if (!joinArg && !singlePlayer) {
+        throw new Error('missing game id (use ?q=<uuid>)');
       }
 
-      let resizeRaf = 0;
-      function scheduleResize(module) {
-        if (resizeRaf) return;
-        resizeRaf = requestAnimationFrame(() => {
-          resizeRaf = 0;
-          resizeCanvas(module);
-        });
-      }
+      let iwadId = null;
+      let pwadIds = [];
+      let warpMap = null;
+      let wadIds = [];
 
-      async function main() {
-        if (typeof window.createZandronumModule !== 'function') {
-          throw new Error('Emscripten module factory missing (createZandronumModule).');
-        }
+      if (joinArg) {
+        // Before attempting to initialize the game or connect over WebRTC,
+        // fetch game info (routed to the master crate; response is a GameSummary JSON).
+        const gameId = getGameIdForInfoOrThrow(joinArg);
+        const gameInfoJson = await fetchGameInfo(gameId);
 
-        // Load optional client-side overrides (name/config/doom2.wad override).
-        dorchSettings = await loadDorchSettings();
-
-        const joinArg = getGameIdFromUrl();
-        if (joinArg && !window.LivekitClient) {
-          throw new Error('LiveKit SDK failed to load (LivekitClient global missing).');
-        }
-        const singlePlayer = !joinArg ? getSinglePlayerParamsFromUrl() : null;
-
-        // Multiplayer path: ?q/?g. Single player path: ?iwad (+ optional ?pwad/?warp).
-        if (!joinArg && !singlePlayer) {
-          throw new Error('missing game id (use ?q=<uuid>)');
-        }
-
-        let iwadId = null;
-        let pwadIds = [];
-        let warpMap = null;
-        let wadIds = [];
-
-        if (joinArg) {
-          // Before attempting to initialize the game or connect over WebRTC,
-          // fetch game info (routed to the master crate; response is a GameSummary JSON).
-          const gameId = getGameIdForInfoOrThrow(joinArg);
-          const gameInfoJson = await fetchGameInfo(gameId);
-
-          // Determine IWAD vs PWAD IDs based on game info (prefer root.*; fallback info.*).
-          const root = gameInfoJson && typeof gameInfoJson === 'object' ? gameInfoJson : {};
-          const infoObj = root.info && typeof root.info === 'object' ? root.info : null;
-          iwadId = (typeof root.iwad === 'string' && root.iwad) ? root.iwad
-            : (infoObj && typeof infoObj.iwad === 'string' ? infoObj.iwad : null);
-          pwadIds = Array.isArray(root.files) ? root.files
-            : (infoObj && Array.isArray(infoObj.files) ? infoObj.files : []);
-
-          if (!iwadId) {
-            throw new Error('game info missing iwad UUID');
-          }
-
-          // Normalize IDs (case-insensitive UUIDs) so they match wad_urls response keys.
-          iwadId = normalizeUuid(iwadId);
-          pwadIds = pwadIds.map((id) => normalizeUuid(id));
-          wadIds = [iwadId, ...pwadIds];
-        } else {
-          iwadId = singlePlayer.iwadId;
-          pwadIds = singlePlayer.pwadIds;
-          warpMap = singlePlayer.warp;
-          wadIds = [iwadId, ...pwadIds];
-        }
+        // Determine IWAD vs PWAD IDs based on game info (prefer root.*; fallback info.*).
+        const root = gameInfoJson && typeof gameInfoJson === 'object' ? gameInfoJson : {};
+        const infoObj = root.info && typeof root.info === 'object' ? root.info : null;
+        iwadId = (typeof root.iwad === 'string' && root.iwad) ? root.iwad
+          : (infoObj && typeof infoObj.iwad === 'string' ? infoObj.iwad : null);
+        pwadIds = Array.isArray(root.files) ? root.files
+          : (infoObj && Array.isArray(infoObj.files) ? infoObj.files : []);
 
         if (!iwadId) {
-          throw new Error('missing iwad UUID');
+          throw new Error('game info missing iwad UUID');
         }
 
-        // If user provided a doom2.wad override, replace freedoom2.wad (specific IWAD ID) with it.
-        const doom2OverrideBytes = dorchSettings && dorchSettings.doom2OverrideBytes;
-        const hasDoom2Override = (iwadId === FREEDOOM2_IWAD_ID)
-          && doom2OverrideBytes && doom2OverrideBytes.length;
+        // Normalize IDs (case-insensitive UUIDs) so they match wad_urls response keys.
+        iwadId = normalizeUuid(iwadId);
+        pwadIds = pwadIds.map((id) => normalizeUuid(id));
+        wadIds = [iwadId, ...pwadIds];
+      } else {
+        iwadId = singlePlayer.iwadId;
+        pwadIds = singlePlayer.pwadIds;
+        warpMap = singlePlayer.warp;
+        wadIds = [iwadId, ...pwadIds];
+      }
 
-        const allIds = [iwadId, ...pwadIds];
+      if (!iwadId) {
+        throw new Error('missing iwad UUID');
+      }
 
-        // Attempt to load any requested WADs from IndexedDB first.
-        const idbRecByWadId = new Map();
+      // If user provided a doom2.wad override, replace freedoom2.wad (specific IWAD ID) with it.
+      const doom2OverrideBytes = dorchSettings && dorchSettings.doom2OverrideBytes;
+      const hasDoom2Override = (iwadId === FREEDOOM2_IWAD_ID)
+        && doom2OverrideBytes && doom2OverrideBytes.length;
+
+      const allIds = [iwadId, ...pwadIds];
+
+      // Attempt to load any requested WADs from IndexedDB first.
+      const idbRecByWadId = new Map();
+      try {
+        await Promise.all(allIds.map(async (id) => {
+          try {
+            const rec = await idbGetFile(id);
+            if (rec && typeof rec === 'object' && rec.data) {
+              idbRecByWadId.set(id, rec);
+            }
+          } catch (_) {
+            // ignore per-file
+          }
+        }));
+      } catch (_) {
+        // ignore
+      }
+
+      // Only resolve remote URLs for IDs that are not present in IDB.
+      const missingIds = allIds.filter((id) => {
+        if (id === iwadId && hasDoom2Override) return false;
+        return !idbRecByWadId.has(id);
+      });
+
+      let wadUrlsResp = { items: [] };
+      if (missingIds.length) {
+        wadUrlsResp = await resolveWadUrls(missingIds);
+      }
+
+      // Map wad_id -> url for fast lookup.
+      const urlByWadId = new Map();
+      for (const item of (wadUrlsResp?.items || [])) {
+        if (item && typeof item.wad_id === 'string' && typeof item.url === 'string') {
+          urlByWadId.set(item.wad_id, item.url);
+        }
+      }
+
+      // Download + decompress all required WADs before starting the engine.
+      setHud('Downloading WADs…');
+      let wadBytesById = new Map();
+      const wadPathById = new Map();
+
+      for (const id of allIds) {
+        if (id === iwadId && hasDoom2Override) {
+          wadBytesById.set(id, doom2OverrideBytes);
+          wadPathById.set(id, `/wads/${id}.wad`);
+          console.log('Using doom2_override for IWAD id=', id);
+          continue;
+        }
+
+        const idbRec = idbRecByWadId.get(id);
+        if (idbRec) {
+          const u8 = coerceToUint8(idbRec.data);
+          if (!u8 || !u8.length) {
+            throw new Error(`IndexedDB entry for wad_id=${id} had no data`);
+          }
+          wadBytesById.set(id, u8);
+          const ext = (typeof idbRec.ext === 'string' ? String(idbRec.ext) : null)
+            || inferExtensionFromName(idbRec.name)
+            || '.wad';
+          wadPathById.set(id, `/wads/${id}${ext.startsWith('.') ? ext : ('.' + ext)}`);
+          continue;
+        }
+
+        const url = urlByWadId.get(id);
+        if (!url) {
+          throw new Error(`missing resolved URL for wad_id=${id}`);
+        }
+        const bytes = await downloadAndMaybeGunzip(url);
+        wadBytesById.set(id, bytes);
+        const ext = inferDecompressedExtensionFromUrl(url);
+        wadPathById.set(id, `/wads/${id}${ext}`);
+      }
+
+      // Paths we will write into the Emscripten FS.
+      const iwadPath = wadPathById.get(iwadId);
+      const pwadPaths = pwadIds.map((id) => wadPathById.get(id));
+
+      if (!iwadPath) {
+        throw new Error('failed to determine IWAD path');
+      }
+      for (let i = 0; i < pwadPaths.length; i++) {
+        if (!pwadPaths[i]) {
+          throw new Error(`failed to determine PWAD path for wad_id=${pwadIds[i]}`);
+        }
+      }
+
+      // LiveKit is only required for the multiplayer (?q/?g) path.
+      let room = null;
+      let token = null;
+      let url = null;
+      if (joinArg) {
+        setHud('Joining room…');
+        const joined = await join(joinArg);
+        token = joined.token;
+        url = joined.url;
+
+        setHud('Connecting WebRTC…');
+        room = new LivekitClient.Room({});
+      }
+
+      // Promise that resolves on the first user gesture.
+      let resolveFirstGesture;
+      const firstGesture = new Promise((resolve) => { resolveFirstGesture = resolve; });
+
+      // Chrome blocks audio + pointer lock until a user gesture.
+      // Keep a persistent pointer handler so we can re-capture mouse after blur.
+      let inputHandlersInstalled = false;
+      let currentModule = null;
+
+      // Shared: call this from canvas clicks OR touch UI controls.
+      async function handleUserGesture() {
         try {
-          await Promise.all(allIds.map(async (id) => {
+          canvas.focus?.();
+        } catch (_) { }
+
+        // Pointer lock for mouse capture (desktop). Ignore failures on mobile.
+        try {
+          if (!debugTouch && !document.pointerLockElement && canvas.requestPointerLock) {
+            canvas.requestPointerLock();
+          }
+        } catch (_) { }
+
+        // LiveKit audio (optional).
+        try {
+          await room?.startAudio?.();
+        } catch (_) { }
+
+        // SDL/WebAudio (Emscripten): best-effort resume.
+        try {
+          const mod = currentModule;
+          const ctx = mod?.SDL2?.audioContext || mod?.SDL?.audioContext || window.SDL2?.audioContext;
+          if (ctx && ctx.state === 'suspended' && typeof ctx.resume === 'function') {
+            await ctx.resume();
+          }
+        } catch (_) { }
+
+        if (resolveFirstGesture) {
+          try { resolveFirstGesture(); } catch (_) { }
+          resolveFirstGesture = null;
+        }
+      }
+
+      function updatePointerLockUi() {
+        const locked = document.pointerLockElement === canvas;
+        canvas.style.cursor = locked ? 'none' : 'default';
+      }
+
+      function installInputHandlers() {
+        if (inputHandlersInstalled) return;
+        inputHandlersInstalled = true;
+
+        document.addEventListener('pointerlockchange', updatePointerLockUi);
+        updatePointerLockUi();
+
+        const handler = async () => {
+          await handleUserGesture();
+        };
+
+        // Not once: we need to re-acquire pointer lock after tab blur.
+        canvas.addEventListener('pointerdown', handler);
+      }
+
+      function installTouchControls() {
+        if (!touchLayer || !touchJoystick || !touchJoystickKnob || !touchFire || !touchUse || !touchMenu || !touchMap || !touchSpacebar) return;
+
+        function setTouchVisible(visible) {
+          try {
+            touchLayer.dataset.visible = visible ? '1' : '0';
+          } catch (_) { }
+        }
+
+        setTouchVisible(isTouch());
+
+        // In debug-touch mode, make mouse movement not affect look.
+        try {
+          if (debugTouch) {
+            console.log('debugtouch=1: disabling physical mouse-look (joystick-only look)');
+          }
+        } catch (_) { }
+
+        // SDL 1.2 key symbols (stable numeric values).
+        const SDLK_LEFT = 276;
+        const SDLK_RIGHT = 275;
+        const SDLK_UP = 273;
+        const SDLK_DOWN = 274;
+        const SDLK_LCTRL = 306;
+        const SDLK_SPACE = 32;
+        const SDLK_E = 101;
+        const SDLK_ESCAPE = 27;
+        const SDLK_TAB = 9;
+
+        // SDL 1.2 mouse button IDs.
+        const SDL_BUTTON_LEFT = 1;
+
+        const keyDownState = new Map();
+
+        function sendKey(sym, down) {
+          const mod = currentModule;
+          const prev = !!keyDownState.get(sym);
+          if (prev === !!down) return;
+          keyDownState.set(sym, !!down);
+
+          // Prefer native injection into SDL event queue.
+          if (mod && typeof mod._ZAN_WebInjectKey === 'function') {
             try {
-              const rec = await idbGetFile(id);
-              if (rec && typeof rec === 'object' && rec.data) {
-                idbRecByWadId.set(id, rec);
-              }
-            } catch (_) {
-              // ignore per-file
-            }
-          }));
-        } catch (_) {
-          // ignore
-        }
-
-        // Only resolve remote URLs for IDs that are not present in IDB.
-        const missingIds = allIds.filter((id) => {
-          if (id === iwadId && hasDoom2Override) return false;
-          return !idbRecByWadId.has(id);
-        });
-
-        let wadUrlsResp = { items: [] };
-        if (missingIds.length) {
-          wadUrlsResp = await resolveWadUrls(missingIds);
-        }
-
-        // Map wad_id -> url for fast lookup.
-        const urlByWadId = new Map();
-        for (const item of (wadUrlsResp?.items || [])) {
-          if (item && typeof item.wad_id === 'string' && typeof item.url === 'string') {
-            urlByWadId.set(item.wad_id, item.url);
-          }
-        }
-
-        // Download + decompress all required WADs before starting the engine.
-        setHud('Downloading WADs…');
-        let wadBytesById = new Map();
-        const wadPathById = new Map();
-
-        for (const id of allIds) {
-          if (id === iwadId && hasDoom2Override) {
-            wadBytesById.set(id, doom2OverrideBytes);
-            wadPathById.set(id, `/wads/${id}.wad`);
-            console.log('Using doom2_override for IWAD id=', id);
-            continue;
+              mod._ZAN_WebInjectKey(sym, down ? 1 : 0);
+              return;
+            } catch (_) { }
           }
 
-          const idbRec = idbRecByWadId.get(id);
-          if (idbRec) {
-            const u8 = coerceToUint8(idbRec.data);
-            if (!u8 || !u8.length) {
-              throw new Error(`IndexedDB entry for wad_id=${id} had no data`);
-            }
-            wadBytesById.set(id, u8);
-            const ext = (typeof idbRec.ext === 'string' ? String(idbRec.ext) : null)
-              || inferExtensionFromName(idbRec.name)
-              || '.wad';
-            wadPathById.set(id, `/wads/${id}${ext.startsWith('.') ? ext : ('.' + ext)}`);
-            continue;
-          }
-
-          const url = urlByWadId.get(id);
-          if (!url) {
-            throw new Error(`missing resolved URL for wad_id=${id}`);
-          }
-          const bytes = await downloadAndMaybeGunzip(url);
-          wadBytesById.set(id, bytes);
-          const ext = inferDecompressedExtensionFromUrl(url);
-          wadPathById.set(id, `/wads/${id}${ext}`);
-        }
-
-        // Paths we will write into the Emscripten FS.
-        const iwadPath = wadPathById.get(iwadId);
-        const pwadPaths = pwadIds.map((id) => wadPathById.get(id));
-
-        if (!iwadPath) {
-          throw new Error('failed to determine IWAD path');
-        }
-        for (let i = 0; i < pwadPaths.length; i++) {
-          if (!pwadPaths[i]) {
-            throw new Error(`failed to determine PWAD path for wad_id=${pwadIds[i]}`);
-          }
-        }
-
-        // LiveKit is only required for the multiplayer (?q/?g) path.
-        let room = null;
-        let token = null;
-        let url = null;
-        if (joinArg) {
-          setHud('Joining room…');
-          const joined = await join(joinArg);
-          token = joined.token;
-          url = joined.url;
-
-          setHud('Connecting WebRTC…');
-          room = new LivekitClient.Room({});
-        }
-
-        // Promise that resolves on the first user gesture.
-        let resolveFirstGesture;
-        const firstGesture = new Promise((resolve) => { resolveFirstGesture = resolve; });
-
-        // Chrome blocks audio + pointer lock until a user gesture.
-        // Keep a persistent pointer handler so we can re-capture mouse after blur.
-        let inputHandlersInstalled = false;
-        let currentModule = null;
-
-        // Shared: call this from canvas clicks OR touch UI controls.
-        async function handleUserGesture() {
+          // Fallback: dispatch DOM key events (best-effort).
           try {
-            canvas.focus?.();
-          } catch (_) {}
+            const type = down ? 'keydown' : 'keyup';
+            const ev = new KeyboardEvent(type, { bubbles: true, cancelable: true });
+            canvas.dispatchEvent(ev);
+            document.dispatchEvent(ev);
+          } catch (_) { }
+        }
 
-          // Pointer lock for mouse capture (desktop). Ignore failures on mobile.
-          try {
-            if (!debugTouch && !document.pointerLockElement && canvas.requestPointerLock) {
-              canvas.requestPointerLock();
+        function sendMouseButton(button, down) {
+          const mod = currentModule;
+          if (mod && typeof mod._ZAN_WebInjectMouseButton === 'function') {
+            try {
+              mod._ZAN_WebInjectMouseButton(button, down ? 1 : 0);
+              return true;
+            } catch (_) { }
+          }
+
+          return false;
+        }
+
+        function releaseAllKeys() {
+          for (const [sym, down] of keyDownState.entries()) {
+            if (down) {
+              sendKey(sym, false);
             }
-          } catch (_) {}
+          }
+        }
 
-          // LiveKit audio (optional).
+        function tapKey(sym) {
+          sendKey(sym, true);
+          window.setTimeout(() => sendKey(sym, false), 40);
+        }
+
+        // --- Joystick: smooth virtual joystick axes (Yaw + Forward) ---
+        let joyPointerId = null;
+        let joyActive = false;
+        let joyX = 0;
+        let joyY = 0;
+        let joyBaseRect = null;
+
+        function setVirtualJoy(x, y) {
+          const mod = currentModule;
+          if (!mod) return;
+
+          // In debugTouch mode, ignore physical mouse so only joystick controls yaw.
           try {
-            await room?.startAudio?.();
-          } catch (_) {}
+            if (debugTouch && typeof mod._ZAN_WebSetIgnorePhysicalMouse === 'function') {
+              mod._ZAN_WebSetIgnorePhysicalMouse(1);
+            }
+          } catch (_) { }
 
-          // SDL/WebAudio (Emscripten): best-effort resume.
+          // Ensure joystick input path is enabled.
+          try {
+            if (typeof mod._ZAN_WebSetUseJoystick === 'function') {
+              mod._ZAN_WebSetUseJoystick(1);
+            }
+          } catch (_) { }
+
+          try {
+            if (typeof mod._ZAN_WebSetVirtualJoyAxes === 'function') {
+              mod._ZAN_WebSetVirtualJoyAxes(x, y);
+              return;
+            }
+          } catch (_) { }
+
+          // Fallbacks: if the virtual joystick export isn't present, degrade to keys.
+          const dead = 0.22;
+          sendKey(SDLK_UP, y < -dead);
+          sendKey(SDLK_DOWN, y > dead);
+          sendKey(SDLK_LEFT, x < -dead);
+          sendKey(SDLK_RIGHT, x > dead);
+        }
+
+        function updateKnob() {
+          if (!joyBaseRect) {
+            try { joyBaseRect = touchJoystick.getBoundingClientRect(); } catch (_) { }
+          }
+          const rect = joyBaseRect;
+          if (!rect) return;
+
+          const radius = Math.min(rect.width, rect.height) * 0.34;
+          const px = joyX * radius;
+          const py = joyY * radius;
+          touchJoystickKnob.style.transform = `translate(calc(-50% + ${px.toFixed(1)}px), calc(-50% + ${py.toFixed(1)}px))`;
+        }
+
+        function computeJoyFromClient(clientX, clientY) {
+          if (!joyBaseRect) {
+            try { joyBaseRect = touchJoystick.getBoundingClientRect(); } catch (_) { }
+          }
+          const rect = joyBaseRect;
+          if (!rect) return { x: 0, y: 0 };
+          const cx = rect.left + rect.width / 2;
+          const cy = rect.top + rect.height / 2;
+          const dx = clientX - cx;
+          const dy = clientY - cy;
+          const maxR = Math.min(rect.width, rect.height) * 0.42;
+          const len = Math.hypot(dx, dy) || 1;
+          const clamped = Math.min(len, maxR);
+          const nx = (dx / len) * (clamped / maxR);
+          const ny = (dy / len) * (clamped / maxR);
+          return { x: nx, y: ny };
+        }
+
+        function joystickEnd() {
+          joyActive = false;
+          joyPointerId = null;
+          joyX = 0;
+          joyY = 0;
+          joyBaseRect = null;
+          try {
+            touchJoystickKnob.style.transform = 'translate(-50%, -50%)';
+          } catch (_) { }
           try {
             const mod = currentModule;
-            const ctx = mod?.SDL2?.audioContext || mod?.SDL?.audioContext || window.SDL2?.audioContext;
-            if (ctx && ctx.state === 'suspended' && typeof ctx.resume === 'function') {
-              await ctx.resume();
+            if (mod && typeof mod._ZAN_WebClearVirtualJoyAxes === 'function') {
+              mod._ZAN_WebClearVirtualJoyAxes();
             }
-          } catch (_) {}
+          } catch (_) { }
+          setVirtualJoy(0, 0);
+        }
 
-          if (resolveFirstGesture) {
-            try { resolveFirstGesture(); } catch (_) {}
-            resolveFirstGesture = null;
+        touchJoystick.addEventListener('pointerdown', (e) => {
+          if (!isTouch()) return;
+          e.preventDefault();
+          e.stopPropagation();
+          handleUserGesture();
+          try { touchJoystick.setPointerCapture(e.pointerId); } catch (_) { }
+          joyPointerId = e.pointerId;
+          joyActive = true;
+          joyBaseRect = null;
+          const v = computeJoyFromClient(e.clientX, e.clientY);
+          joyX = v.x;
+          joyY = v.y;
+          updateKnob();
+          setVirtualJoy(joyX, joyY);
+        }, { passive: false });
+
+        touchJoystick.addEventListener('pointermove', (e) => {
+          if (!joyActive || e.pointerId !== joyPointerId) return;
+          e.preventDefault();
+          e.stopPropagation();
+          const v = computeJoyFromClient(e.clientX, e.clientY);
+          joyX = v.x;
+          joyY = v.y;
+          updateKnob();
+          setVirtualJoy(joyX, joyY);
+        }, { passive: false });
+
+        touchJoystick.addEventListener('pointerup', (e) => {
+          if (e.pointerId !== joyPointerId) return;
+          e.preventDefault();
+          e.stopPropagation();
+          joystickEnd();
+        }, { passive: false });
+
+        touchJoystick.addEventListener('pointercancel', (e) => {
+          if (e.pointerId !== joyPointerId) return;
+          e.preventDefault();
+          e.stopPropagation();
+          joystickEnd();
+        }, { passive: false });
+
+        // --- Action buttons ---
+        function installHoldButton(el, keySym, labelEl) {
+          let pointerId = null;
+          let down = false;
+
+          function setDown(next) {
+            down = !!next;
+            try { el.dataset.down = down ? '1' : '0'; } catch (_) { }
+            sendKey(keySym, down);
           }
-        }
 
-        function updatePointerLockUi() {
-          const locked = document.pointerLockElement === canvas;
-          canvas.style.cursor = locked ? 'none' : 'default';
-        }
+          el.addEventListener('pointerdown', (e) => {
+            if (!isTouch()) return;
+            e.preventDefault();
+            e.stopPropagation();
+            handleUserGesture();
+            pointerId = e.pointerId;
+            try { el.setPointerCapture(pointerId); } catch (_) { }
+            setDown(true);
+          }, { passive: false });
 
-        function installInputHandlers() {
-          if (inputHandlersInstalled) return;
-          inputHandlersInstalled = true;
-
-          document.addEventListener('pointerlockchange', updatePointerLockUi);
-          updatePointerLockUi();
-
-          const handler = async () => {
-            await handleUserGesture();
+          const end = (e) => {
+            if (pointerId === null) return;
+            if (e && e.pointerId !== pointerId) return;
+            if (e) {
+              try { e.preventDefault(); } catch (_) { }
+              try { e.stopPropagation(); } catch (_) { }
+            }
+            pointerId = null;
+            setDown(false);
           };
 
-          // Not once: we need to re-acquire pointer lock after tab blur.
-          canvas.addEventListener('pointerdown', handler);
+          el.addEventListener('pointerup', end, { passive: false });
+          el.addEventListener('pointercancel', end, { passive: false });
+          el.addEventListener('pointerleave', (e) => {
+            // If pointer capture isn't supported, leaving should cancel hold.
+            if (pointerId !== null && !el.hasPointerCapture?.(pointerId)) {
+              end(e);
+            }
+          }, { passive: false });
+
+          return { end };
         }
 
-        function installTouchControls() {
-          if (!touchLayer || !touchJoystick || !touchJoystickKnob || !touchFire || !touchUse || !touchMenu || !touchMap || !touchSpacebar) return;
+        function installHoldMouseButton(el, button) {
+          let pointerId = null;
+          let down = false;
 
-          function setTouchVisible(visible) {
-            try {
-              touchLayer.dataset.visible = visible ? '1' : '0';
-            } catch (_) {}
-          }
+          function setDown(next) {
+            down = !!next;
+            try { el.dataset.down = down ? '1' : '0'; } catch (_) { }
 
-          setTouchVisible(isTouch());
-
-          // In debug-touch mode, make mouse movement not affect look.
-          try {
-            if (debugTouch) {
-              console.log('debugtouch=1: disabling physical mouse-look (joystick-only look)');
-            }
-          } catch (_) {}
-
-          // SDL 1.2 key symbols (stable numeric values).
-          const SDLK_LEFT = 276;
-          const SDLK_RIGHT = 275;
-          const SDLK_UP = 273;
-          const SDLK_DOWN = 274;
-          const SDLK_LCTRL = 306;
-          const SDLK_SPACE = 32;
-          const SDLK_E = 101;
-          const SDLK_ESCAPE = 27;
-          const SDLK_TAB = 9;
-
-          // SDL 1.2 mouse button IDs.
-          const SDL_BUTTON_LEFT = 1;
-
-          const keyDownState = new Map();
-
-          function sendKey(sym, down) {
-            const mod = currentModule;
-            const prev = !!keyDownState.get(sym);
-            if (prev === !!down) return;
-            keyDownState.set(sym, !!down);
-
-            // Prefer native injection into SDL event queue.
-            if (mod && typeof mod._ZAN_WebInjectKey === 'function') {
-              try {
-                mod._ZAN_WebInjectKey(sym, down ? 1 : 0);
-                return;
-              } catch (_) {}
-            }
-
-            // Fallback: dispatch DOM key events (best-effort).
-            try {
-              const type = down ? 'keydown' : 'keyup';
-              const ev = new KeyboardEvent(type, { bubbles: true, cancelable: true });
-              canvas.dispatchEvent(ev);
-              document.dispatchEvent(ev);
-            } catch (_) {}
-          }
-
-          function sendMouseButton(button, down) {
-            const mod = currentModule;
-            if (mod && typeof mod._ZAN_WebInjectMouseButton === 'function') {
-              try {
-                mod._ZAN_WebInjectMouseButton(button, down ? 1 : 0);
-                return true;
-              } catch (_) {}
-            }
-
-            return false;
-          }
-
-          function releaseAllKeys() {
-            for (const [sym, down] of keyDownState.entries()) {
-              if (down) {
-                sendKey(sym, false);
-              }
+            // Prefer mouse button injection for +attack. If unavailable (e.g. module not ready),
+            // fall back to the historical Ctrl binding.
+            if (!sendMouseButton(button, down)) {
+              sendKey(SDLK_LCTRL, down);
             }
           }
 
-          function tapKey(sym) {
-            sendKey(sym, true);
-            window.setTimeout(() => sendKey(sym, false), 40);
-          }
-
-          // --- Joystick: smooth virtual joystick axes (Yaw + Forward) ---
-          let joyPointerId = null;
-          let joyActive = false;
-          let joyX = 0;
-          let joyY = 0;
-          let joyBaseRect = null;
-
-          function setVirtualJoy(x, y) {
-            const mod = currentModule;
-            if (!mod) return;
-
-            // In debugTouch mode, ignore physical mouse so only joystick controls yaw.
-            try {
-              if (debugTouch && typeof mod._ZAN_WebSetIgnorePhysicalMouse === 'function') {
-                mod._ZAN_WebSetIgnorePhysicalMouse(1);
-              }
-            } catch (_) {}
-
-            // Ensure joystick input path is enabled.
-            try {
-              if (typeof mod._ZAN_WebSetUseJoystick === 'function') {
-                mod._ZAN_WebSetUseJoystick(1);
-              }
-            } catch (_) {}
-
-            try {
-              if (typeof mod._ZAN_WebSetVirtualJoyAxes === 'function') {
-                mod._ZAN_WebSetVirtualJoyAxes(x, y);
-                return;
-              }
-            } catch (_) {}
-
-            // Fallbacks: if the virtual joystick export isn't present, degrade to keys.
-            const dead = 0.22;
-            sendKey(SDLK_UP, y < -dead);
-            sendKey(SDLK_DOWN, y > dead);
-            sendKey(SDLK_LEFT, x < -dead);
-            sendKey(SDLK_RIGHT, x > dead);
-          }
-
-          function updateKnob() {
-            if (!joyBaseRect) {
-              try { joyBaseRect = touchJoystick.getBoundingClientRect(); } catch (_) {}
-            }
-            const rect = joyBaseRect;
-            if (!rect) return;
-
-            const radius = Math.min(rect.width, rect.height) * 0.34;
-            const px = joyX * radius;
-            const py = joyY * radius;
-            touchJoystickKnob.style.transform = `translate(calc(-50% + ${px.toFixed(1)}px), calc(-50% + ${py.toFixed(1)}px))`;
-          }
-
-          function computeJoyFromClient(clientX, clientY) {
-            if (!joyBaseRect) {
-              try { joyBaseRect = touchJoystick.getBoundingClientRect(); } catch (_) {}
-            }
-            const rect = joyBaseRect;
-            if (!rect) return { x: 0, y: 0 };
-            const cx = rect.left + rect.width / 2;
-            const cy = rect.top + rect.height / 2;
-            const dx = clientX - cx;
-            const dy = clientY - cy;
-            const maxR = Math.min(rect.width, rect.height) * 0.42;
-            const len = Math.hypot(dx, dy) || 1;
-            const clamped = Math.min(len, maxR);
-            const nx = (dx / len) * (clamped / maxR);
-            const ny = (dy / len) * (clamped / maxR);
-            return { x: nx, y: ny };
-          }
-
-          function joystickEnd() {
-            joyActive = false;
-            joyPointerId = null;
-            joyX = 0;
-            joyY = 0;
-            joyBaseRect = null;
-            try {
-              touchJoystickKnob.style.transform = 'translate(-50%, -50%)';
-            } catch (_) {}
-            try {
-              const mod = currentModule;
-              if (mod && typeof mod._ZAN_WebClearVirtualJoyAxes === 'function') {
-                mod._ZAN_WebClearVirtualJoyAxes();
-              }
-            } catch (_) {}
-            setVirtualJoy(0, 0);
-          }
-
-          touchJoystick.addEventListener('pointerdown', (e) => {
+          el.addEventListener('pointerdown', (e) => {
             if (!isTouch()) return;
             e.preventDefault();
             e.stopPropagation();
             handleUserGesture();
-            try { touchJoystick.setPointerCapture(e.pointerId); } catch (_) {}
-            joyPointerId = e.pointerId;
-            joyActive = true;
-            joyBaseRect = null;
-            const v = computeJoyFromClient(e.clientX, e.clientY);
-            joyX = v.x;
-            joyY = v.y;
-            updateKnob();
-            setVirtualJoy(joyX, joyY);
+            pointerId = e.pointerId;
+            try { el.setPointerCapture(pointerId); } catch (_) { }
+            setDown(true);
           }, { passive: false });
 
-          touchJoystick.addEventListener('pointermove', (e) => {
-            if (!joyActive || e.pointerId !== joyPointerId) return;
-            e.preventDefault();
-            e.stopPropagation();
-            const v = computeJoyFromClient(e.clientX, e.clientY);
-            joyX = v.x;
-            joyY = v.y;
-            updateKnob();
-            setVirtualJoy(joyX, joyY);
-          }, { passive: false });
-
-          touchJoystick.addEventListener('pointerup', (e) => {
-            if (e.pointerId !== joyPointerId) return;
-            e.preventDefault();
-            e.stopPropagation();
-            joystickEnd();
-          }, { passive: false });
-
-          touchJoystick.addEventListener('pointercancel', (e) => {
-            if (e.pointerId !== joyPointerId) return;
-            e.preventDefault();
-            e.stopPropagation();
-            joystickEnd();
-          }, { passive: false });
-
-          // --- Action buttons ---
-          function installHoldButton(el, keySym, labelEl) {
-            let pointerId = null;
-            let down = false;
-
-            function setDown(next) {
-              down = !!next;
-              try { el.dataset.down = down ? '1' : '0'; } catch (_) {}
-              sendKey(keySym, down);
+          const end = (e) => {
+            if (pointerId === null) return;
+            if (e && e.pointerId !== pointerId) return;
+            if (e) {
+              try { e.preventDefault(); } catch (_) { }
+              try { e.stopPropagation(); } catch (_) { }
             }
+            pointerId = null;
+            setDown(false);
+          };
 
-            el.addEventListener('pointerdown', (e) => {
-              if (!isTouch()) return;
-              e.preventDefault();
-              e.stopPropagation();
-              handleUserGesture();
-              pointerId = e.pointerId;
-              try { el.setPointerCapture(pointerId); } catch (_) {}
-              setDown(true);
-            }, { passive: false });
-
-            const end = (e) => {
-              if (pointerId === null) return;
-              if (e && e.pointerId !== pointerId) return;
-              if (e) {
-                try { e.preventDefault(); } catch (_) {}
-                try { e.stopPropagation(); } catch (_) {}
-              }
-              pointerId = null;
-              setDown(false);
-            };
-
-            el.addEventListener('pointerup', end, { passive: false });
-            el.addEventListener('pointercancel', end, { passive: false });
-            el.addEventListener('pointerleave', (e) => {
-              // If pointer capture isn't supported, leaving should cancel hold.
-              if (pointerId !== null && !el.hasPointerCapture?.(pointerId)) {
-                end(e);
-              }
-            }, { passive: false });
-
-            return { end };
-          }
-
-          function installHoldMouseButton(el, button) {
-            let pointerId = null;
-            let down = false;
-
-            function setDown(next) {
-              down = !!next;
-              try { el.dataset.down = down ? '1' : '0'; } catch (_) {}
-
-              // Prefer mouse button injection for +attack. If unavailable (e.g. module not ready),
-              // fall back to the historical Ctrl binding.
-              if (!sendMouseButton(button, down)) {
-                sendKey(SDLK_LCTRL, down);
-              }
+          el.addEventListener('pointerup', end, { passive: false });
+          el.addEventListener('pointercancel', end, { passive: false });
+          el.addEventListener('pointerleave', (e) => {
+            if (pointerId !== null && !el.hasPointerCapture?.(pointerId)) {
+              end(e);
             }
-
-            el.addEventListener('pointerdown', (e) => {
-              if (!isTouch()) return;
-              e.preventDefault();
-              e.stopPropagation();
-              handleUserGesture();
-              pointerId = e.pointerId;
-              try { el.setPointerCapture(pointerId); } catch (_) {}
-              setDown(true);
-            }, { passive: false });
-
-            const end = (e) => {
-              if (pointerId === null) return;
-              if (e && e.pointerId !== pointerId) return;
-              if (e) {
-                try { e.preventDefault(); } catch (_) {}
-                try { e.stopPropagation(); } catch (_) {}
-              }
-              pointerId = null;
-              setDown(false);
-            };
-
-            el.addEventListener('pointerup', end, { passive: false });
-            el.addEventListener('pointercancel', end, { passive: false });
-            el.addEventListener('pointerleave', (e) => {
-              if (pointerId !== null && !el.hasPointerCapture?.(pointerId)) {
-                end(e);
-              }
-            }, { passive: false });
-
-            return { end };
-          }
-
-          // FIRE: Mouse1 (most common +attack binding). Fallback handled inside installHoldMouseButton.
-          const fireBtn = installHoldMouseButton(touchFire, SDL_BUTTON_LEFT);
-
-          // USE: map to 'E' (Space is commonly jump on modern configs).
-          const useBtn = installHoldButton(touchUse, SDLK_E);
-          const mapBtn = installHoldButton(touchMap, SDLK_TAB);
-          const spaceBtn = installHoldButton(touchSpacebar, SDLK_SPACE);
-
-          // Menu is a tap (ESC down+up).
-          touchMenu.addEventListener('pointerdown', (e) => {
-            if (!isTouch()) return;
-            e.preventDefault();
-            e.stopPropagation();
-            handleUserGesture();
-            try { touchMenu.dataset.down = '1'; } catch (_) {}
-            tapKey(SDLK_ESCAPE);
-            window.setTimeout(() => {
-              try { touchMenu.dataset.down = '0'; } catch (_) {}
-            }, 90);
           }, { passive: false });
 
-          // Cleanup: avoid stuck keys if the tab loses focus.
-          window.addEventListener('blur', () => {
+          return { end };
+        }
+
+        // FIRE: Mouse1 (most common +attack binding). Fallback handled inside installHoldMouseButton.
+        const fireBtn = installHoldMouseButton(touchFire, SDL_BUTTON_LEFT);
+
+        // USE: map to 'E' (Space is commonly jump on modern configs).
+        const useBtn = installHoldButton(touchUse, SDLK_E);
+        const mapBtn = installHoldButton(touchMap, SDLK_TAB);
+        const spaceBtn = installHoldButton(touchSpacebar, SDLK_SPACE);
+
+        // Menu is a tap (ESC down+up).
+        touchMenu.addEventListener('pointerdown', (e) => {
+          if (!isTouch()) return;
+          e.preventDefault();
+          e.stopPropagation();
+          handleUserGesture();
+          try { touchMenu.dataset.down = '1'; } catch (_) { }
+          tapKey(SDLK_ESCAPE);
+          window.setTimeout(() => {
+            try { touchMenu.dataset.down = '0'; } catch (_) { }
+          }, 90);
+        }, { passive: false });
+
+        // Cleanup: avoid stuck keys if the tab loses focus.
+        window.addEventListener('blur', () => {
+          joystickEnd();
+          fireBtn.end();
+          useBtn.end();
+          mapBtn.end();
+          spaceBtn.end();
+          releaseAllKeys();
+        });
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState !== 'visible') {
             joystickEnd();
             fireBtn.end();
             useBtn.end();
             mapBtn.end();
             spaceBtn.end();
             releaseAllKeys();
-          });
-          document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState !== 'visible') {
-              joystickEnd();
-              fireBtn.end();
-              useBtn.end();
-              mapBtn.end();
-              spaceBtn.end();
-              releaseAllKeys();
-            }
-          });
-
-          // If the user flips debugTouch later, reflect it on resize.
-          window.addEventListener('resize', () => setTouchVisible(isTouch()));
-          window.addEventListener('orientationchange', () => setTouchVisible(isTouch()));
-        }
-
-        // Install early so LiveKit connect is always gated.
-        installInputHandlers();
-        installTouchControls();
-
-        // UDP queue for the WASM side to poll.
-        const udpQueue = [];
-        const stats = {
-          wasmSendCalls: 0,
-          wasmRecvCalls: 0,
-          lkRecv: 0,
-          lkSend: 0,
-          lkSendErr: 0,
-        };
-
-        function publishUdp(u8, reliable) {
-          if (!room || !room.localParticipant || !window.LivekitClient) return false;
-          const dest = ['server'];
-
-          // Preferred signature (LK v2): publishData(data, { reliable, topic, destinationIdentities })
-          try {
-            room.localParticipant.publishData(u8, {
-              reliable: !!reliable,
-              topic: 'udp',
-              destinationIdentities: dest,
-            });
-            stats.lkSend++;
-            return true;
-          } catch (_) {
-            // Fall through.
           }
-
-          // Fallback signature:
-          // publishData(data, kind, options)
-          const kind = reliable
-            ? LivekitClient.DataPacket_Kind.RELIABLE
-            : LivekitClient.DataPacket_Kind.LOSSY;
-          try {
-            room.localParticipant.publishData(u8, kind, {
-              topic: 'udp',
-              destinationIdentities: dest,
-            });
-            stats.lkSend++;
-            return true;
-          } catch (_) {
-            // Fall back to broadcasting.
-          }
-          try {
-            room.localParticipant.publishData(u8, kind, { topic: 'udp' });
-            stats.lkSend++;
-            return true;
-          } catch (_) {
-            stats.lkSendErr++;
-            return false;
-          }
-        }
-
-        if (room) {
-          room.on(LivekitClient.RoomEvent.DataReceived, (payload, participant, kind, topic) => {
-            // Some LiveKit publishData overloads may omit topic on the receiver.
-            // Treat missing topic as UDP for this app.
-            if (topic && topic !== 'udp') return;
-            if ((participant?.identity ?? '') !== 'server') return;
-            // payload is Uint8Array
-            udpQueue.push(payload);
-            stats.lkRecv++;
-          });
-
-          // Start immediately; browsers may still require a gesture for audio and pointer lock,
-          // but the game can load and run without blocking on a click.
-          setHud('Connecting WebRTC…');
-          await room.connect(url, token);
-        }
-
-        const debugEnabled = getParam('debug') === '1';
-
-        if (debugEnabled) {
-          // If this never prints, the engine likely blocks the JS event loop.
-          setTimeout(() => console.log('debug: event loop still alive (pre-callMain)'), 1000);
-        }
-
-        // Debug-only: verify that LiveKit data packets reach the server/proxy
-        // even if the engine never calls into the UDP bridge.
-        if (debugEnabled && room) {
-          try {
-            const bytes = new TextEncoder().encode('zan-debug-ping');
-            const ok = publishUdp(bytes, true);
-            console.log('debug: sent zan-debug-ping ok=', ok);
-          } catch (e) {
-            console.warn('debug: failed to send zan-debug-ping', e);
-          }
-        }
-
-        // JS transport surface consumed by src/network.cpp (EM_JS hooks).
-        // IMPORTANT: this Zandronum build is MODULARIZE'd, so the C++ EM_JS
-        // hooks see the *module instance*, not window.Module.
-        // We attach __zanRtc onto the module instance via the factory options
-        // passed to createZandronumModule().
-        const zanRtc = {
-          debug: debugEnabled,
-          recvUdp() {
-            stats.wasmRecvCalls++;
-            return udpQueue.length ? udpQueue.shift() : null;
-          },
-          sendUdp(u8, reliable) {
-            stats.wasmSendCalls++;
-            publishUdp(u8, !!reliable);
-          },
-        };
-
-        setHud('Starting game…');
-
-        function tryDecodeCStringPtr(mod, ptr) {
-          try {
-            if (!mod || typeof ptr !== 'number' || !Number.isFinite(ptr) || ptr <= 0) return null;
-            const heap = mod.HEAPU8;
-            if (!heap) return null;
-            // Heuristic: treat ptr as pointer to a null-terminated UTF-8 string.
-            const maxLen = 4096;
-            let end = ptr;
-            const maxEnd = Math.min(heap.length, ptr + maxLen);
-            while (end < maxEnd && heap[end] !== 0) end++;
-            if (end === ptr) return '';
-            if (end >= heap.length) return null;
-            return new TextDecoder('utf-8', { fatal: false }).decode(heap.subarray(ptr, end));
-          } catch (_) {
-            return null;
-          }
-        }
-
-        const persistNameFromEngine = (nextName) => {
-          const value = String(nextName ?? '');
-          try {
-            window.localStorage.setItem(LS_NAME_KEY, value);
-          } catch (_) {}
-          try {
-            if (dorchSettings && typeof dorchSettings === 'object') {
-              dorchSettings.name = value;
-            }
-          } catch (_) {}
-        };
-
-        const zand = await window.createZandronumModule({
-          noInitialRun: true,
-          __zanRtc: zanRtc,
-          __zanOnNameChanged: persistNameFromEngine,
-          canvas,
-          onAbort: (what) => {
-            const decoded = tryDecodeCStringPtr(zand, what);
-            console.error('Zandronum abort:', what, typeof what, decoded ? `decoded="${decoded}"` : '');
-          },
-          quit: (status, toThrow) => {
-            console.error('Zandronum quit:', { status, toThrowType: typeof toThrow, toThrow });
-            throw toThrow;
-          },
-          preRun: [
-            function () {
-              // Ensure a writable home + XDG-ish config base exists.
-              // Zandronum uses NicePath("~/.config/") on Unix.
-              if (typeof FS !== 'undefined' && FS.mkdir) {
-                try { FS.mkdir('/home'); } catch (_) {}
-                try { FS.mkdir('/home/web_user'); } catch (_) {}
-                try { FS.mkdir('/home/web_user/.config'); } catch (_) {}
-                // NOTE: WAD/PK3 files are written after module creation via zand.FS.
-              }
-            },
-          ],
-          print: (t) => {
-            if (t !== undefined && t !== null && String(t).trim()) {
-              console.log(String(t));
-            }
-          },
-          printErr: (t) => {
-            if (t !== undefined && t !== null && String(t).trim()) {
-              console.error(String(t));
-            }
-          },
         });
 
-        // Give input handlers access to the module instance (for resuming SDL audio).
-        currentModule = zand;
+        // If the user flips debugTouch later, reflect it on resize.
+        window.addEventListener('resize', () => setTouchVisible(isTouch()));
+        window.addEventListener('orientationchange', () => setTouchVisible(isTouch()));
+      }
 
-        // If we're debugging touch controls on desktop, make sure physical mouse movement
-        // never affects view angle. Touch joystick controls yaw via virtual joy axes.
-        if (debugTouch) {
-          try {
-            if (typeof zand._ZAN_WebSetIgnorePhysicalMouse === 'function') {
-              zand._ZAN_WebSetIgnorePhysicalMouse(1);
-            }
-          } catch (_) {}
-        }
+      // Install early so LiveKit connect is always gated.
+      installInputHandlers();
+      installTouchControls();
 
-        // Best-effort graceful disconnect when the tab/page is closed or navigated away.
-        // We use pagehide (not unload) so it also fires for bfcache navigations.
-        // NOTE: This must be synchronous and fast.
-        let didSendDisconnect = false;
-        function trySendDisconnect(reason) {
-          if (didSendDisconnect) return;
-          didSendDisconnect = true;
-          try {
-            const fn = zand && (zand._ZAN_WebDisconnect || zand._zan_web_disconnect);
-            if (typeof fn === 'function') fn();
-          } catch (e) {
-            if (debugEnabled) console.warn('disconnect failed:', reason, e);
-          }
-        }
-        window.addEventListener('pagehide', () => trySendDisconnect('pagehide'), { capture: true });
+      // UDP queue for the WASM side to poll.
+      const udpQueue = [];
+      const stats = {
+        wasmSendCalls: 0,
+        wasmRecvCalls: 0,
+        lkRecv: 0,
+        lkSend: 0,
+        lkSendErr: 0,
+      };
 
-        // Write downloaded IWAD/PWAD bytes into the Emscripten FS.
-        // Doing this here (instead of preRun) avoids relying on a global FS binding.
+      function publishUdp(u8, reliable) {
+        if (!room || !room.localParticipant || !window.LivekitClient) return false;
+        const dest = ['server'];
+
+        // Preferred signature (LK v2): publishData(data, { reliable, topic, destinationIdentities })
         try {
-          if (!zand.FS || !zand.FS.writeFile) {
-            throw new Error('Emscripten FS not available on module');
-          }
-          try { zand.FS.mkdir('/wads'); } catch (_) {}
-
-          const iwadBytes = wadBytesById.get(iwadId);
-          if (!iwadBytes || !iwadBytes.length) {
-            throw new Error('missing IWAD bytes');
-          }
-          zand.FS.writeFile(iwadPath, iwadBytes);
-
-          for (let i = 0; i < pwadIds.length; i++) {
-            const id = pwadIds[i];
-            const p = pwadPaths[i];
-            const b = wadBytesById.get(id);
-            if (!b || !b.length) {
-              throw new Error(`missing PWAD bytes for wad_id=${id}`);
-            }
-            zand.FS.writeFile(p, b);
-          }
-          wadBytesById = undefined; // free memory
-
-          if (debugEnabled) {
-            const list = [];
-            try {
-              for (const name of zand.FS.readdir('/wads')) {
-                if (name === '.' || name === '..') continue;
-                list.push(name);
-              }
-            } catch (_) {}
-            console.log('debug: wrote IWAD bytes=', iwadBytes.length, 'path=', iwadPath);
-            console.log('debug: /wads contains:', list);
-          }
-        } catch (e) {
-          console.error('Failed to write downloaded WADs into FS:', e);
-          throw e;
+          room.localParticipant.publishData(u8, {
+            reliable: !!reliable,
+            topic: 'udp',
+            destinationIdentities: dest,
+          });
+          stats.lkSend++;
+          return true;
+        } catch (_) {
+          // Fall through.
         }
 
-        // Optional: LS_CONFIG_KEY stores an autoexec.cfg. Put it where Zandronum expects it.
-        // On Unix this resolves to ~/.config/zandronum/autoexec.cfg (see M_GetAutoexecPath/GetUserFile).
-        const autoexecText = dorchSettings && typeof dorchSettings.config === 'string' ? dorchSettings.config : '';
-        const autoexecPath = autoexecText && String(autoexecText).trim()
-          ? '/home/web_user/.config/zandronum/autoexec.cfg'
-          : null;
-        if (autoexecPath) {
-          try {
-            try { zand.FS.mkdir('/home'); } catch (_) {}
-            try { zand.FS.mkdir('/home/web_user'); } catch (_) {}
-            try { zand.FS.mkdir('/home/web_user/.config'); } catch (_) {}
-            try { zand.FS.mkdir('/home/web_user/.config/zandronum'); } catch (_) {}
-            zand.FS.writeFile(autoexecPath, new TextEncoder().encode(String(autoexecText)));
-            console.log('Wrote overridden autoexec.cfg at', autoexecPath);
-          } catch (e) {
-            console.warn('Failed to write overridden autoexec.cfg:', e);
-          }
-        }
-
-        if (debugEnabled) {
-          try {
-            const hasFs = !!zand.FS;
-            const pk3Path = '/zandronum.pk3';
-            const iwadExists = hasFs ? !!zand.FS.analyzePath(iwadPath).exists : false;
-            const pk3Exists = hasFs ? !!zand.FS.analyzePath(pk3Path).exists : false;
-            console.log('debug: FS available=', hasFs, 'iwadExists=', iwadExists, 'pk3Exists=', pk3Exists);
-            if (!iwadExists) {
-              console.warn('debug: missing IWAD at', iwadPath);
-            }
-          } catch (e) {
-            console.warn('debug: FS check failed', e);
-          }
-        }
-
-        // IMPORTANT: do this synchronously before callMain() (which may block the event loop).
-        resizeCanvas(zand);
-        window.addEventListener('resize', () => scheduleResize(zand));
-        window.addEventListener('orientationchange', () => scheduleResize(zand));
-        window.addEventListener('fullscreenchange', () => scheduleResize(zand));
-        // visualViewport helps on mobile where the URL bar affects layout.
-        window.visualViewport?.addEventListener('resize', () => scheduleResize(zand));
-
-        // Kick off the engine.
-        // Multiplayer: use -connect and bridge UDP over WebRTC.
-        // Single-player: omit -connect and run locally.
-        console.log('pwadPaths:', pwadPaths);
+        // Fallback signature:
+        // publishData(data, kind, options)
+        const kind = reliable
+          ? LivekitClient.DataPacket_Kind.RELIABLE
+          : LivekitClient.DataPacket_Kind.LOSSY;
         try {
-          const args = [];
-          args.push('-iwad', iwadPath);
-          for (const p of pwadPaths) {
-            args.push('-file', p);
-          }
-
-          const overrideName = dorchSettings && typeof dorchSettings.name === 'string' ? dorchSettings.name : null;
-          if (overrideName && String(overrideName).trim()) {
-            args.push('+set', 'name', String(overrideName));
-          }
-
-          if (joinArg) {
-            // The IP is a dummy; UDP is bridged over WebRTC.
-            args.push('-connect', '127.0.0.1');
-          }
-
-          // Default volumes in Zandronum are pretty loud for the web client.
-          // Users can still override these in the in-game menus.
-          args.push(
-            '+set',
-            'snd_sfxvolume',
-            '0.25',
-            '+set',
-            'snd_musicvolume',
-            '0.25',
-          );
-
-          if (warpMap) {
-            args.push('+map', String(warpMap));
-          }
-          console.log('Starting Zandronum with args:', args);
-          zand.callMain(args);
-        } catch (e) {
-          const decoded = tryDecodeCStringPtr(zand, e);
-          console.error('callMain threw:', e, typeof e, decoded ? `decoded="${decoded}"` : '');
-          throw e;
+          room.localParticipant.publishData(u8, kind, {
+            topic: 'udp',
+            destinationIdentities: dest,
+          });
+          stats.lkSend++;
+          return true;
+        } catch (_) {
+          // Fall back to broadcasting.
         }
-
-        if (debugEnabled) {
-          // If this never prints, callMain likely never returns (busy loop / no emscripten main loop integration).
-          setTimeout(() => console.log('debug: event loop still alive (post-callMain)'), 1000);
-        }
-
-        // Minimal on-screen diagnostic (only if ?debug=1).
-        if (debugEnabled) {
-          setInterval(() => {
-            let cssSize = 'unknown';
-            try {
-              const r = canvas.getBoundingClientRect();
-              cssSize = `${Math.round(r.width)}x${Math.round(r.height)}`;
-            } catch (_) {}
-            const dpr = Math.max(1, Number(window.devicePixelRatio) || 1);
-            setHud(
-              `css=${cssSize} buf=${canvas.width}x${canvas.height} dpr=${dpr.toFixed(2)}\n` +
-              `wasmSend=${stats.wasmSendCalls} wasmRecv=${stats.wasmRecvCalls} lkSend=${stats.lkSend} lkSendErr=${stats.lkSendErr} lkRecv=${stats.lkRecv} udpQueue=${udpQueue.length}`
-            );
-          }, 250);
-        } else {
-          setHud('');
+        try {
+          room.localParticipant.publishData(u8, kind, { topic: 'udp' });
+          stats.lkSend++;
+          return true;
+        } catch (_) {
+          stats.lkSendErr++;
+          return false;
         }
       }
 
-      main().catch((e) => {
-        const msg = e?.stack || String(e);
-        setHud(String(msg));
-        console.error('main() rejected:', e, typeof e);
+      if (room) {
+        room.on(LivekitClient.RoomEvent.DataReceived, (payload, participant, kind, topic) => {
+          // Some LiveKit publishData overloads may omit topic on the receiver.
+          // Treat missing topic as UDP for this app.
+          if (topic && topic !== 'udp') return;
+          if ((participant?.identity ?? '') !== 'server') return;
+          // payload is Uint8Array
+          udpQueue.push(payload);
+          stats.lkRecv++;
+        });
+
+        // Start immediately; browsers may still require a gesture for audio and pointer lock,
+        // but the game can load and run without blocking on a click.
+        setHud('Connecting WebRTC…');
+        await room.connect(url, token);
+      }
+
+      const debugEnabled = getParam('debug') === '1';
+
+      if (debugEnabled) {
+        // If this never prints, the engine likely blocks the JS event loop.
+        setTimeout(() => console.log('debug: event loop still alive (pre-callMain)'), 1000);
+      }
+
+      // Debug-only: verify that LiveKit data packets reach the server/proxy
+      // even if the engine never calls into the UDP bridge.
+      if (debugEnabled && room) {
+        try {
+          const bytes = new TextEncoder().encode('zan-debug-ping');
+          const ok = publishUdp(bytes, true);
+          console.log('debug: sent zan-debug-ping ok=', ok);
+        } catch (e) {
+          console.warn('debug: failed to send zan-debug-ping', e);
+        }
+      }
+
+      // JS transport surface consumed by src/network.cpp (EM_JS hooks).
+      // IMPORTANT: this Zandronum build is MODULARIZE'd, so the C++ EM_JS
+      // hooks see the *module instance*, not window.Module.
+      // We attach __zanRtc onto the module instance via the factory options
+      // passed to createZandronumModule().
+      const zanRtc = {
+        debug: debugEnabled,
+        recvUdp() {
+          stats.wasmRecvCalls++;
+          return udpQueue.length ? udpQueue.shift() : null;
+        },
+        sendUdp(u8, reliable) {
+          stats.wasmSendCalls++;
+          publishUdp(u8, !!reliable);
+        },
+      };
+
+      setHud('Starting game…');
+
+      function tryDecodeCStringPtr(mod, ptr) {
+        try {
+          if (!mod || typeof ptr !== 'number' || !Number.isFinite(ptr) || ptr <= 0) return null;
+          const heap = mod.HEAPU8;
+          if (!heap) return null;
+          // Heuristic: treat ptr as pointer to a null-terminated UTF-8 string.
+          const maxLen = 4096;
+          let end = ptr;
+          const maxEnd = Math.min(heap.length, ptr + maxLen);
+          while (end < maxEnd && heap[end] !== 0) end++;
+          if (end === ptr) return '';
+          if (end >= heap.length) return null;
+          return new TextDecoder('utf-8', { fatal: false }).decode(heap.subarray(ptr, end));
+        } catch (_) {
+          return null;
+        }
+      }
+
+      const persistNameFromEngine = (nextName) => {
+        const value = String(nextName ?? '');
+        try {
+          window.localStorage.setItem(LS_NAME_KEY, value);
+        } catch (_) { }
+        try {
+          if (dorchSettings && typeof dorchSettings === 'object') {
+            dorchSettings.name = value;
+          }
+        } catch (_) { }
+        void syncProfileDisplayNameFromEngine(value);
+      };
+
+      let lastSyncedProfileDisplayName = null;
+      let profileDisplayNameSyncInFlight = false;
+
+      async function syncProfileDisplayNameFromEngine(nextName) {
+        const displayName = String(nextName ?? '').trim();
+        if (!displayName) return;
+        if (displayName === lastSyncedProfileDisplayName) return;
+        if (profileDisplayNameSyncInFlight) return;
+
+        let accessToken = null;
+        let userId = null;
+        try {
+          accessToken = window.localStorage.getItem(STORAGE_KEY_ACCESS_TOKEN);
+          userId = window.localStorage.getItem(STORAGE_KEY_USER_ID);
+        } catch (_) {
+          return;
+        }
+
+        if (!accessToken || !userId) return;
+
+        profileDisplayNameSyncInFlight = true;
+        try {
+          const res = await fetch(`${API_BASE_URL}/user/profile/${encodeURIComponent(userId)}`, {
+            method: 'PUT',
+            headers: {
+              'content-type': 'application/json',
+              accept: 'application/json',
+              authorization: `Bearer ${accessToken}`
+            },
+            body: JSON.stringify({ display_name: displayName })
+          });
+
+          if (!res.ok) return;
+
+          lastSyncedProfileDisplayName = displayName;
+        } catch (_) {
+        } finally {
+          profileDisplayNameSyncInFlight = false;
+        }
+      }
+
+      const zand = await window.createZandronumModule({
+        noInitialRun: true,
+        __zanRtc: zanRtc,
+        __zanOnNameChanged: persistNameFromEngine,
+        canvas,
+        onAbort: (what) => {
+          const decoded = tryDecodeCStringPtr(zand, what);
+          console.error('Zandronum abort:', what, typeof what, decoded ? `decoded="${decoded}"` : '');
+        },
+        quit: (status, toThrow) => {
+          console.error('Zandronum quit:', { status, toThrowType: typeof toThrow, toThrow });
+          throw toThrow;
+        },
+        preRun: [
+          function () {
+            // Ensure a writable home + XDG-ish config base exists.
+            // Zandronum uses NicePath("~/.config/") on Unix.
+            if (typeof FS !== 'undefined' && FS.mkdir) {
+              try { FS.mkdir('/home'); } catch (_) { }
+              try { FS.mkdir('/home/web_user'); } catch (_) { }
+              try { FS.mkdir('/home/web_user/.config'); } catch (_) { }
+              // NOTE: WAD/PK3 files are written after module creation via zand.FS.
+            }
+          },
+        ],
+        print: (t) => {
+          if (t !== undefined && t !== null && String(t).trim()) {
+            console.log(String(t));
+          }
+        },
+        printErr: (t) => {
+          if (t !== undefined && t !== null && String(t).trim()) {
+            console.error(String(t));
+          }
+        },
       });
-    </script>
-  </body>
+
+      // Give input handlers access to the module instance (for resuming SDL audio).
+      currentModule = zand;
+
+      // If we're debugging touch controls on desktop, make sure physical mouse movement
+      // never affects view angle. Touch joystick controls yaw via virtual joy axes.
+      if (debugTouch) {
+        try {
+          if (typeof zand._ZAN_WebSetIgnorePhysicalMouse === 'function') {
+            zand._ZAN_WebSetIgnorePhysicalMouse(1);
+          }
+        } catch (_) { }
+      }
+
+      // Best-effort graceful disconnect when the tab/page is closed or navigated away.
+      // We use pagehide (not unload) so it also fires for bfcache navigations.
+      // NOTE: This must be synchronous and fast.
+      let didSendDisconnect = false;
+      function trySendDisconnect(reason) {
+        if (didSendDisconnect) return;
+        didSendDisconnect = true;
+        try {
+          const fn = zand && (zand._ZAN_WebDisconnect || zand._zan_web_disconnect);
+          if (typeof fn === 'function') fn();
+        } catch (e) {
+          if (debugEnabled) console.warn('disconnect failed:', reason, e);
+        }
+      }
+      window.addEventListener('pagehide', () => trySendDisconnect('pagehide'), { capture: true });
+
+      // Write downloaded IWAD/PWAD bytes into the Emscripten FS.
+      // Doing this here (instead of preRun) avoids relying on a global FS binding.
+      try {
+        if (!zand.FS || !zand.FS.writeFile) {
+          throw new Error('Emscripten FS not available on module');
+        }
+        try { zand.FS.mkdir('/wads'); } catch (_) { }
+
+        const iwadBytes = wadBytesById.get(iwadId);
+        if (!iwadBytes || !iwadBytes.length) {
+          throw new Error('missing IWAD bytes');
+        }
+        zand.FS.writeFile(iwadPath, iwadBytes);
+
+        for (let i = 0; i < pwadIds.length; i++) {
+          const id = pwadIds[i];
+          const p = pwadPaths[i];
+          const b = wadBytesById.get(id);
+          if (!b || !b.length) {
+            throw new Error(`missing PWAD bytes for wad_id=${id}`);
+          }
+          zand.FS.writeFile(p, b);
+        }
+        wadBytesById = undefined; // free memory
+
+        if (debugEnabled) {
+          const list = [];
+          try {
+            for (const name of zand.FS.readdir('/wads')) {
+              if (name === '.' || name === '..') continue;
+              list.push(name);
+            }
+          } catch (_) { }
+          console.log('debug: wrote IWAD bytes=', iwadBytes.length, 'path=', iwadPath);
+          console.log('debug: /wads contains:', list);
+        }
+      } catch (e) {
+        console.error('Failed to write downloaded WADs into FS:', e);
+        throw e;
+      }
+
+      // Optional: LS_CONFIG_KEY stores an autoexec.cfg. Put it where Zandronum expects it.
+      // On Unix this resolves to ~/.config/zandronum/autoexec.cfg (see M_GetAutoexecPath/GetUserFile).
+      const autoexecText = dorchSettings && typeof dorchSettings.config === 'string' ? dorchSettings.config : '';
+      const autoexecPath = autoexecText && String(autoexecText).trim()
+        ? '/home/web_user/.config/zandronum/autoexec.cfg'
+        : null;
+      if (autoexecPath) {
+        try {
+          try { zand.FS.mkdir('/home'); } catch (_) { }
+          try { zand.FS.mkdir('/home/web_user'); } catch (_) { }
+          try { zand.FS.mkdir('/home/web_user/.config'); } catch (_) { }
+          try { zand.FS.mkdir('/home/web_user/.config/zandronum'); } catch (_) { }
+          zand.FS.writeFile(autoexecPath, new TextEncoder().encode(String(autoexecText)));
+          console.log('Wrote overridden autoexec.cfg at', autoexecPath);
+        } catch (e) {
+          console.warn('Failed to write overridden autoexec.cfg:', e);
+        }
+      }
+
+      if (debugEnabled) {
+        try {
+          const hasFs = !!zand.FS;
+          const pk3Path = '/zandronum.pk3';
+          const iwadExists = hasFs ? !!zand.FS.analyzePath(iwadPath).exists : false;
+          const pk3Exists = hasFs ? !!zand.FS.analyzePath(pk3Path).exists : false;
+          console.log('debug: FS available=', hasFs, 'iwadExists=', iwadExists, 'pk3Exists=', pk3Exists);
+          if (!iwadExists) {
+            console.warn('debug: missing IWAD at', iwadPath);
+          }
+        } catch (e) {
+          console.warn('debug: FS check failed', e);
+        }
+      }
+
+      // IMPORTANT: do this synchronously before callMain() (which may block the event loop).
+      resizeCanvas(zand);
+      window.addEventListener('resize', () => scheduleResize(zand));
+      window.addEventListener('orientationchange', () => scheduleResize(zand));
+      window.addEventListener('fullscreenchange', () => scheduleResize(zand));
+      // visualViewport helps on mobile where the URL bar affects layout.
+      window.visualViewport?.addEventListener('resize', () => scheduleResize(zand));
+
+      // Kick off the engine.
+      // Multiplayer: use -connect and bridge UDP over WebRTC.
+      // Single-player: omit -connect and run locally.
+      console.log('pwadPaths:', pwadPaths);
+      try {
+        const args = [];
+        args.push('-iwad', iwadPath);
+        for (const p of pwadPaths) {
+          args.push('-file', p);
+        }
+
+        const overrideName = dorchSettings && typeof dorchSettings.name === 'string' ? dorchSettings.name : null;
+        if (overrideName && String(overrideName).trim()) {
+          args.push('+set', 'name', String(overrideName));
+        }
+
+        if (joinArg) {
+          // The IP is a dummy; UDP is bridged over WebRTC.
+          args.push('-connect', '127.0.0.1');
+        }
+
+        // Default volumes in Zandronum are pretty loud for the web client.
+        // Users can still override these in the in-game menus.
+        args.push(
+          '+set',
+          'snd_sfxvolume',
+          '0.25',
+          '+set',
+          'snd_musicvolume',
+          '0.25',
+        );
+
+        if (warpMap) {
+          args.push('+map', String(warpMap));
+        }
+        console.log('Starting Zandronum with args:', args);
+        zand.callMain(args);
+      } catch (e) {
+        const decoded = tryDecodeCStringPtr(zand, e);
+        console.error('callMain threw:', e, typeof e, decoded ? `decoded="${decoded}"` : '');
+        throw e;
+      }
+
+      if (debugEnabled) {
+        // If this never prints, callMain likely never returns (busy loop / no emscripten main loop integration).
+        setTimeout(() => console.log('debug: event loop still alive (post-callMain)'), 1000);
+      }
+
+      // Minimal on-screen diagnostic (only if ?debug=1).
+      if (debugEnabled) {
+        setInterval(() => {
+          let cssSize = 'unknown';
+          try {
+            const r = canvas.getBoundingClientRect();
+            cssSize = `${Math.round(r.width)}x${Math.round(r.height)}`;
+          } catch (_) { }
+          const dpr = Math.max(1, Number(window.devicePixelRatio) || 1);
+          setHud(
+            `css=${cssSize} buf=${canvas.width}x${canvas.height} dpr=${dpr.toFixed(2)}\n` +
+            `wasmSend=${stats.wasmSendCalls} wasmRecv=${stats.wasmRecvCalls} lkSend=${stats.lkSend} lkSendErr=${stats.lkSendErr} lkRecv=${stats.lkRecv} udpQueue=${udpQueue.length}`
+          );
+        }, 250);
+      } else {
+        setHud('');
+      }
+    }
+
+    main().catch((e) => {
+      const msg = e?.stack || String(e);
+      setHud(String(msg));
+      console.error('main() rejected:', e, typeof e);
+    });
+  </script>
+</body>
+
 </html>
