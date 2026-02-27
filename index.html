@@ -1738,10 +1738,17 @@
             body: JSON.stringify({ display_name: displayName })
           });
 
-          if (!res.ok) return;
+          if (!res.ok) {
+            console.warn('Failed to sync in-game display name to profile.', {
+              status: res.status,
+              statusText: res.statusText
+            });
+            return;
+          }
 
           lastSyncedProfileDisplayName = displayName;
-        } catch (_) {
+        } catch (err) {
+          console.warn('Error syncing in-game display name to profile.', err);
         } finally {
           profileDisplayNameSyncInFlight = false;
         }
