@@ -68,6 +68,18 @@
 #include "menu/menu.h"
 #include "voicechat.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+
+EM_JS(void, zan_web_on_name_changed, (const char *nameStr), {
+	try {
+		if (Module && typeof Module.__zanOnNameChanged === 'function') {
+			Module.__zanOnNameChanged(UTF8ToString(nameStr));
+		}
+	} catch (_) {}
+});
+#endif
+
 static FRandom pr_pickteam ("PickRandomTeam");
 
 extern bool st_firsttime;
@@ -915,6 +927,10 @@ void D_UserInfoChanged (FBaseCVar *cvar)
 		}
 		// [BB] Get rid of this cast.
 		V_ColorizeString( const_cast<char *> ( val.String ) );
+
+#ifdef __EMSCRIPTEN__
+		zan_web_on_name_changed( val.String );
+#endif
 	}
 	else if ( cvar == &handicap )
 	{

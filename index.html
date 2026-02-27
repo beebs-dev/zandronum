@@ -1681,9 +1681,22 @@
           }
         }
 
+        const persistNameFromEngine = (nextName) => {
+          const value = String(nextName ?? '');
+          try {
+            window.localStorage.setItem(LS_NAME_KEY, value);
+          } catch (_) {}
+          try {
+            if (dorchSettings && typeof dorchSettings === 'object') {
+              dorchSettings.name = value;
+            }
+          } catch (_) {}
+        };
+
         const zand = await window.createZandronumModule({
           noInitialRun: true,
           __zanRtc: zanRtc,
+          __zanOnNameChanged: persistNameFromEngine,
           canvas,
           onAbort: (what) => {
             const decoded = tryDecodeCStringPtr(zand, what);
