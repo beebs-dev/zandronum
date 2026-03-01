@@ -11,6 +11,8 @@ echo "Using Data Root: ${DATA_ROOT:-unset}"
 echo "Using Map Rotation: ${ROTATION:-unset}"
 echo "Using Random Rotation: ${ROTATION_RANDOM:-unset}"
 echo "Using dmflags: ${DMFLAGS:-unset}"
+echo "Using frag limit: ${FRAG_LIMIT:-unset}"
+echo "Using time limit: ${TIME_LIMIT:-unset}"
 #echo "Deathmatch mode: ${DEATHMATCH:-unset}"
 #echo "Cooperative mode: ${COOPERATIVE:-unset}"
 #echo "Teamplay mode: ${TEAMPLAY:-unset}"
@@ -81,6 +83,14 @@ case "${GAMEMODE:-0}" in
         SERVER+=( +deathmatch 1 )
         ;;
 esac
+
+if [[ -n "${FRAG_LIMIT:-}" ]]; then
+  SERVER+=( +fraglimit "${FRAG_LIMIT}" )
+fi
+
+if [[ -n "${TIME_LIMIT:-}" ]]; then
+  SERVER+=( +timelimit "${TIME_LIMIT}" )
+fi
 
 if [[ -n "${DMFLAGS:-}" ]]; then
   SERVER+=( +dmflags "${DMFLAGS}" )
