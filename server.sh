@@ -68,7 +68,6 @@ SERVER=(
   +sv_weaponstay 1
   +sv_itemrespawn 1
   +sv_hostname "$SERVER_NAME"
-  +dmflags ${DMFLAGS:-0}
 )
 
 case "${GAMEMODE:-0}" in
@@ -82,6 +81,10 @@ case "${GAMEMODE:-0}" in
         SERVER+=( +deathmatch 1 )
         ;;
 esac
+
+if [[ -n "${DMFLAGS:-}" ]]; then
+  SERVER+=( +dmflags "${DMFLAGS}" )
+fi
 
 if [[ -n "${ROTATION:-}" ]]; then
   SERVER+=( +sv_maprotation "1" )
