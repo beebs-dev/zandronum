@@ -10,6 +10,7 @@ echo "Using Game Skill: ${SKILL:-unset}"
 echo "Using Data Root: ${DATA_ROOT:-unset}"
 echo "Using Map Rotation: ${ROTATION:-unset}"
 echo "Using Random Rotation: ${ROTATION_RANDOM:-unset}"
+echo "Using dmflags: ${DMFLAGS:-unset}"
 #echo "Deathmatch mode: ${DEATHMATCH:-unset}"
 #echo "Cooperative mode: ${COOPERATIVE:-unset}"
 #echo "Teamplay mode: ${TEAMPLAY:-unset}"
@@ -67,6 +68,7 @@ SERVER=(
   +sv_weaponstay 1
   +sv_itemrespawn 1
   +sv_hostname "$SERVER_NAME"
+  +dmflags ${DMFLAGS:-0}
 )
 
 case "${GAMEMODE:-0}" in
