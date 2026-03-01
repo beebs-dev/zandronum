@@ -553,6 +553,9 @@ namespace
 
 	static void dorch_reporter_loop( std::chrono::steady_clock::time_point start_time )
 	{
+		const auto startup_delay = std::chrono::seconds( 1 );
+		const auto post_interval = std::chrono::seconds( 30 );
+
 		if ( curl_global_init( CURL_GLOBAL_DEFAULT ) != 0 )
 		{
 			fprintf( stderr, "dorch reporter: curl_global_init failed\n" );
@@ -574,13 +577,12 @@ namespace
 			}
 
 			auto now = std::chrono::steady_clock::now( );
-			const bool startup_delay_done = ( now - start_time ) >= std::chrono::seconds( 1 );
-			const bool throttle_ok = ( last_post_time == std::chrono::steady_clock::time_point::min( ) ) ||
-				( ( now - last_post_time ) >= std::chrono::seconds( 5 ) );
+			const bool startup_delay_done = ( now - start_time ) >= startup_delay;
+			const bool post_due = ( last_post_time == std::chrono::steady_clock::time_point::min( ) ) ||
+				( ( now - last_post_time ) >= post_interval );
 			if ( pending != nullptr && startup_delay_done )
 			{
-				const bool changed = ( last_sent == nullptr ) || ( dorch_snapshot_equals( *pending, *last_sent ) == false );
-				if ( changed && throttle_ok )
+				if ( post_due )
 				{
 					std::string payload = dorch_build_update_json( *pending );
 					if ( dorch_post_update_json( g_dorch_url, payload ) )

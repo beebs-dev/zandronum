@@ -62,14 +62,6 @@ SERVER=(
   -iwad "iwad.wad"
   -skill ${SKILL:-3}
   +map ${WARP:-"MAP01"}
-  +sv_coop_damagefactor 1.0
-  +sv_defaultdmflags 0
-  +sv_maxclientsperip 0
-  +sv_maxplayers "$MAX_PLAYERS"
-  +sv_doubleammo 1
-  +sv_weaponstay 1
-  +sv_itemrespawn 1
-  +sv_hostname "$SERVER_NAME"
 )
 
 case "${GAMEMODE:-0}" in
@@ -119,6 +111,17 @@ if [[ -n "${WAD_LIST:-}" ]]; then
     SERVER+=( -file "$wad_path" )
   done
 fi
+
+SERVER+=(
+  +sv_coop_damagefactor 1.0
+  +sv_defaultdmflags 0
+  +sv_maxclientsperip 0
+  +sv_maxplayers "$MAX_PLAYERS"
+  +sv_doubleammo 1
+  +sv_weaponstay 1
+  +sv_itemrespawn 1
+  +sv_hostname "$SERVER_NAME"
+)
 
 echo ">>> ${SERVER[*]}"
 "${SERVER[@]}" &
