@@ -810,6 +810,15 @@
 
     let dorchSettings = null;
 
+    function generateRandomIdentity() {
+      const adjectives = ['quick', 'bright', 'silent', 'fierce', 'brave', 'clever', 'lucky', 'wild', 'calm', 'proud'];
+      const nouns = ['tiger', 'eagle', 'lion', 'wolf', 'panther', 'hawk', 'fox', 'bear', 'dragon', 'falcon'];
+      const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+      const noun = nouns[Math.floor(Math.random() * nouns.length)];
+      const number = Math.floor(Math.random() * 1000);
+      return `${adj}-${noun}-${number}`;
+    }
+
     function safeJsonParse(value) {
       if (!value) return null;
       try {
@@ -913,13 +922,6 @@
       return out;
     }
 
-    function getIdentityFromUrl() {
-      const fromUrl = getParam('identity');
-      if (fromUrl) return fromUrl;
-      const fromSettings = dorchSettings && typeof dorchSettings.name === 'string' ? dorchSettings.name : null;
-      return fromSettings && String(fromSettings).trim() ? String(fromSettings) : null;
-    }
-
     async function join(serverArg) {
       // serverArg may be either:
       //  - full join URL: https://api.synapse.beebs.dev/room/<uuid>/join
@@ -940,13 +942,13 @@
         ? arg
         : `https://api.dorch.beebs.dev/auth/${arg}`;
 
-      // If ?name=<name> is present, forward it to the join API.
+      // Add identity from localStorage to the auth request.
       let finalJoinUrl = joinUrl;
       try {
-        const name = getIdentityFromUrl();
-        if (name) {
+        const name = dorchSettings && typeof dorchSettings.name === 'string' ? dorchSettings.name : null;
+        if (name && String(name).trim()) {
           const u = new URL(joinUrl);
-          u.searchParams.set('identity', name);
+          u.searchParams.set('identity', String(name).trim());
           finalJoinUrl = u.toString();
         }
       } catch (_) {
@@ -996,6 +998,17 @@
 
       // Load optional client-side overrides (name/config/doom2.wad override).
       dorchSettings = await loadDorchSettings();
+
+      // If no identity is set, generate a random one and persist it.
+      if (!dorchSettings.name || !String(dorchSettings.name).trim()) {
+        const randomName = generateRandomIdentity();
+        dorchSettings.name = randomName;
+        try {
+          window.localStorage.setItem(LS_NAME_KEY, randomName);
+        } catch (_) {
+          // localStorage may be unavailable in some privacy modes.
+        }
+      }
 
       const joinArg = getGameIdFromUrl();
       if (joinArg && !window.LivekitClient) {
