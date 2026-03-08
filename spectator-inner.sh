@@ -373,8 +373,8 @@ if [[ -n "${RTMP_ENDPOINT}" ]]; then
         exit 0
       fi
 
-      echo "[rtmp] ffmpeg exited (code=$rc); retrying in 1s"
-      sleep 1
+      echo "[rtmp] ffmpeg exited (code=$rc); retrying in 6s"
+      sleep 6
     done
   ) &
   ffmpeg_pid=$!
