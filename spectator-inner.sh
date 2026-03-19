@@ -34,6 +34,7 @@ fast_exit() {
   exit 0
 }
 trap fast_exit TERM INT
+
 DEBUG_AUDIO=${DEBUG_AUDIO:-1}
 SERVER_ADDR=${SERVER_ADDR:-localhost:10666}
 IWAD_OVERRIDE=${IWAD_OVERRIDE:-""}
@@ -82,6 +83,13 @@ X264_TUNE=${X264_TUNE:-zerolatency}
 # Optional periodic memory telemetry to confirm RSS stays bounded.
 MEM_LOG_INTERVAL_SECONDS=${MEM_LOG_INTERVAL_SECONDS:-60}
 
+# RTMP reconnect controls.
+RTMP_RETRY_BASE_SECONDS=${RTMP_RETRY_BASE_SECONDS:-8}
+RTMP_RETRY_CAP_SECONDS=${RTMP_RETRY_CAP_SECONDS:-30}
+RTMP_RETRY_JITTER_MAX_SECONDS=${RTMP_RETRY_JITTER_MAX_SECONDS:-3}
+RTMP_RETRY_RESET_AFTER_SECONDS=${RTMP_RETRY_RESET_AFTER_SECONDS:-30}
+RTMP_RETRY_INITIAL_QUIET_SECONDS=${RTMP_RETRY_INITIAL_QUIET_SECONDS:-2}
+
 mem_rss_kb() {
   local pid="$1"
   [[ -n "$pid" ]] || return 1
@@ -111,6 +119,31 @@ log_mem_snapshot() {
   ffmpeg_rss="$(mem_rss_kb "${ffmpeg_child_pid:-}" 2>/dev/null || true)"
 
   echo "[mem] ${now} cgroup_bytes=${cgroup_mem:-?} rss_kb(game=${game_rss:-?} xvfb=${xvfb_rss:-?} ffmpeg=${ffmpeg_rss:-?})"
+}
+
+calc_rtmp_backoff_delay_seconds() {
+  local failures="$1"
+
+  local base="${RTMP_RETRY_BASE_SECONDS}"
+  local cap="${RTMP_RETRY_CAP_SECONDS}"
+  local jitter_max="${RTMP_RETRY_JITTER_MAX_SECONDS}"
+  local delay="$base"
+  local i
+
+  # Exponential growth: base * 2^failures, capped.
+  for (( i=0; i<failures; i++ )); do
+    delay=$((delay * 2))
+    (( delay >= cap )) && break
+  done
+  (( delay > cap )) && delay="$cap"
+
+  # Add jitter, then cap again.
+  if (( jitter_max > 0 )); then
+    delay=$((delay + (RANDOM % (jitter_max + 1))))
+    (( delay > cap )) && delay="$cap"
+  fi
+
+  echo "$delay"
 }
 
 resolve_by_id() {
@@ -274,8 +307,8 @@ CLIENT=(
 if [[ -n "${WAD_LIST:-}" ]]; then
   IFS=',' read -r -a WADS <<< "$WAD_LIST"
   for wad in "${WADS[@]}"; do
-    wad="${wad#"${wad%%[![:space:]]*}"}"  # ltrim
-    wad="${wad%"${wad##*[![:space:]]}"}"  # rtrim
+    wad="${wad#"${wad%%[![:space:]]*}"}"
+    wad="${wad%"${wad##*[![:space:]]}"}"
     [[ -z "$wad" ]] && continue
     wad_path="$(resolve_by_id "$wad")"
     echo "Resolved PWAD id '$wad' to path '$wad_path'"
@@ -333,6 +366,8 @@ if [[ -n "${RTMP_ENDPOINT}" ]]; then
   fi
 
   (
+    rtmp_failures=0
+
     while kill -0 "$game_pid" 2>/dev/null; do
       # `set -e` is active globally. Temporarily disable it so that we can
       # observe ffmpeg's exit code and reconnect on failure.
@@ -355,6 +390,11 @@ if [[ -n "${RTMP_ENDPOINT}" ]]; then
         -f flv "${RTMP_ENDPOINT}"
       )
 
+      attempt_id="${HOSTNAME:-unknown}-$$-$(date +%s)"
+      echo "[rtmp] attempt=${attempt_id} failures=${rtmp_failures} starting publish"
+
+      started_at=$(date +%s)
+
       # Run ffmpeg under a PID we can track. When using `timeout`, the PID is
       # the timeout wrapper (which will in turn terminate ffmpeg).
       if [[ "${FFMPEG_MAX_UPTIME_SECONDS}" != "0" ]] && command -v timeout >/dev/null 2>&1; then
@@ -364,17 +404,36 @@ if [[ -n "${RTMP_ENDPOINT}" ]]; then
       fi
       ffmpeg_child_pid=$!
       echo "${ffmpeg_child_pid}" >"${FFMPEG_PIDFILE}" 2>/dev/null || true
+
       wait "${ffmpeg_child_pid}"
       rc=$?
+      ended_at=$(date +%s)
+      runtime=$((ended_at - started_at))
+
       rm -f "${FFMPEG_PIDFILE}" 2>/dev/null || true
       set -e
+
       # If the game is gone, don't keep reconnecting.
       if ! kill -0 "$game_pid" 2>/dev/null; then
         exit 0
       fi
 
-      echo "[rtmp] ffmpeg exited (code=$rc); retrying in 6s"
-      sleep 6
+      # Reset backoff after a meaningfully long healthy run.
+      if (( runtime >= RTMP_RETRY_RESET_AFTER_SECONDS )); then
+        rtmp_failures=0
+      else
+        rtmp_failures=$((rtmp_failures + 1))
+      fi
+
+      # Quiet period after local exit so the server has a chance to reap the old publisher.
+      if (( RTMP_RETRY_INITIAL_QUIET_SECONDS > 0 )); then
+        echo "[rtmp] ffmpeg exited (code=${rc} runtime=${runtime}s); quiet wait ${RTMP_RETRY_INITIAL_QUIET_SECONDS}s before retry window"
+        sleep "${RTMP_RETRY_INITIAL_QUIET_SECONDS}"
+      fi
+
+      delay="$(calc_rtmp_backoff_delay_seconds "${rtmp_failures}")"
+      echo "[rtmp] ffmpeg exited (code=${rc} runtime=${runtime}s); retrying in ${delay}s (failures=${rtmp_failures})"
+      sleep "${delay}"
     done
   ) &
   ffmpeg_pid=$!
@@ -392,18 +451,16 @@ calc_backoff_delay_seconds() {
   local failures="$1"
 
   local base=3
-  local max_cap=$((14 + RANDOM % 3)) # 14-16 seconds
+  local max_cap=$((14 + RANDOM % 3))
   local delay=$base
-
-  # Exponential backoff: base * 2^failures, capped to max_cap.
   local i
+
   for (( i=0; i<failures; i++ )); do
     delay=$((delay * 2))
     (( delay >= max_cap )) && break
   done
   (( delay > max_cap )) && delay=$max_cap
 
-  # Jitter 0-2 seconds, keep within cap.
   local jitter=$((RANDOM % 3))
   delay=$((delay + jitter))
   (( delay > max_cap )) && delay=$max_cap
@@ -454,8 +511,6 @@ try_upload_liveshot() {
 }
 
 pick_latest_png() {
-  # Zandronum/GZDoom family often writes screenshots to a "screenshots" directory
-  # under either the working dir or the user's config dir.
   local -a candidates=()
   local p
   for p in \
@@ -501,7 +556,6 @@ while kill -0 "$game_pid" 2>/dev/null; do
     log_mem_snapshot || true
   fi
 
-  # If a previous upload failed, keep retrying it with backoff.
   try_upload_liveshot || true
 
   src_png=""
@@ -512,14 +566,13 @@ while kill -0 "$game_pid" 2>/dev/null; do
       last_src="$src_png"
       last_src_mtime="$src_mtime"
 
-      # Always copy to the expected location, then generate the JPG.
       if [[ "$src_png" != "/screenshot.png" ]]; then
         echo "[watcher] Copying $src_png -> /screenshot.png"
         cp -f "$src_png" /screenshot.png
       else
         echo "[watcher] Using /screenshot.png directly"
       fi
-   
+
       echo "[watcher] Converting /screenshot.png -> /screenshot.webp (resize ${VIDEO_WIDTH}x${VIDEO_HEIGHT}!, quality=70)"
       convert /screenshot.png -resize ${VIDEO_WIDTH}x${VIDEO_HEIGHT}\! -quality 70 /screenshot.webp.tmp
       mv -f /screenshot.webp.tmp /screenshot.webp
@@ -527,11 +580,9 @@ while kill -0 "$game_pid" 2>/dev/null; do
       out_sz=$(stat -c %s /screenshot.webp 2>/dev/null || echo "")
       echo "[watcher] Wrote /screenshot.webp (bytes=${out_sz:-?})"
 
-      # Attempt upload immediately after producing a new shot.
       try_upload_liveshot || true
     fi
   else
-    # Emit a heartbeat occasionally so container logs show we're alive.
     if (( loop_i % 10 == 0 )); then
       echo "[watcher] No screenshot found yet. Looked in: /, $PWD, $PWD/screenshots, $HOME/.zandronum/screenshots, $HOME/.config/zandronum/screenshots"
     fi
